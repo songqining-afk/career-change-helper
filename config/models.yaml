@@ -1,0 +1,19 @@
+# Multi-LLM Configuration for 转行帮
+
+# Agent 1: 能力画像专家 (Profile Analyzer) — deep reasoning
+# Agent 2: 市场匹配引擎 (Market Matcher) — strategic matching
+# Agent 3: 路径规划架构师 (Strategy Architect) — planning
+core:
+  provider: anthropic
+  model: claude-opus-4-7
+  agents:
+    - profile_analyzer
+    - market_matcher
+    - strategy_architect
+
+# Agent 4: 内容重构助手 (Content Optimizer) — text optimization
+light:
+  provider: openrouter
+  model: google/gemma-3-27b-it:free
+  agents:
+    - content_optimizer
