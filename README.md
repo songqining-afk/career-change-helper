@@ -43,20 +43,32 @@ cd career-change-helper
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys (ANTHROPIC_API_KEY, OPENROUTER_API_KEY)
+```
 
+### CLI 文字面试（推荐）
+
+```bash
+python3 src/cli_interview.py
+```
+
+交互式终端面试：输入简历 → 4-agent 分析 → 3 轮压力面试 → 最终报告。
+
+### REST API
+
+```bash
 uvicorn src.app:app --reload --port 8000
-
-# Test
-pytest tests/ -v
 ```
 
 ## API
 
 ```
-POST /api/analyze          — Full 5-agent pipeline
-POST /api/analyze/step/1   — Single agent (1-5) for debugging
-GET  /health               — Health check
+POST /api/analyze              — 4-agent 分析 pipeline
+POST /api/analyze/step/{1-4}   — 单个 agent 调试
+POST /api/interview/start      — 开始模拟面试
+POST /api/interview/reply      — 提交回答
+GET  /api/interview/{id}       — 面试状态
+GET  /health                   — Health check
 ```
 
 Request body:
@@ -82,16 +94,17 @@ src/
     base.py                 Agent 基类
   schemas/models.py         Pydantic 数据模型（Agent 间的契约）
   prompts/                  System prompts（每个 Agent 的指令）
-  llm/client.py             LLM 客户端（Anthropic + OpenRouter）
-  pipeline.py               流水线编排器
-  app.py                    FastAPI 入口
+  llm/client.py             LLM 客户端（Anthropic SDK + OpenRouter）
+  pipeline.py               流水线编排器（Agent 1-4）
+  cli_interview.py          CLI 文字面试入口（Agent 5 交互）
+  app.py                    FastAPI REST API 入口
 config/                     模型路由配置
 tests/                      测试套件
 ```
 
 ## Multi-LLM Routing
 
-- Agents 1-3, 5 (reasoning): Anthropic Claude
+- Agents 1-3, 5 (reasoning): Anthropic Claude Opus 4.7 (official SDK, adaptive thinking)
 - Agent 4 (CV optimization): OpenRouter Gemma 27B (cost-efficient)
 
 ## License

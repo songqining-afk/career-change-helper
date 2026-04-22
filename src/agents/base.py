@@ -22,7 +22,7 @@ class BaseAgent:
     name: str = "base"
     prompt_file: str = ""
     provider: str = "anthropic"
-    model: str | None = None
+    model: str | None = None  # defaults to claude-opus-4-7 via LLMClient
 
     def __init__(self, llm: LLMClient | None = None):
         self.llm = llm or LLMClient(provider=self.provider, model=self.model)

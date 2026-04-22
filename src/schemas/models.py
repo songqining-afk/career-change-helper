@@ -114,15 +114,27 @@ class PolishedResume(BaseModel):
     ats_tips: list[str] = Field(default_factory=list, description="ATS 系统优化建议")
 
 
-# ── Agent 5 Output: 模拟面试专家 (Interview Simulator) ──────────────
+# ── Agent 5: 模拟面试专家 (Interview Simulator) — 多轮对话 ──────────
 
 class InterviewQuestion(BaseModel):
-    """单个面试追问。"""
+    """面试官的单个问题。"""
     round_number: int = Field(ge=1, le=3, description="第几轮追问 (1-3)")
     question: str = Field(description="面试官的问题")
-    intent: str = Field(description="这个问题想考察什么")
-    ideal_answer_points: list[str] = Field(description="理想回答应包含的要点")
-    common_pitfalls: list[str] = Field(default_factory=list, description="转行者常见的踩坑回答")
+    intent: str = Field(description="这个问题想考察什么（不展示给用户）")
+
+class AnswerFeedback(BaseModel):
+    """对用户单次回答的即时反馈。"""
+    strengths: list[str] = Field(default_factory=list, description="回答中的亮点")
+    weaknesses: list[str] = Field(default_factory=list, description="暴露的问题")
+    professionalism_score: int = Field(ge=0, le=100, description="本轮专业度评分")
+    follow_up: str = Field(default="", description="面试官的简短点评（展示给用户）")
+
+class InterviewTurn(BaseModel):
+    """一轮面试对话（问 + 答 + 反馈）。"""
+    round_number: int
+    question: InterviewQuestion
+    user_answer: str = Field(default="", description="用户的回答")
+    feedback: AnswerFeedback | None = Field(default=None, description="AI 对回答的反馈")
 
 class ProfessionalismGap(BaseModel):
     """专业度缺口分析。"""
@@ -132,25 +144,32 @@ class ProfessionalismGap(BaseModel):
     fix_suggestion: str = Field(description="如何弥补")
 
 class InterviewReport(BaseModel):
-    """Agent 5 (模拟面试专家) 的输出 — 模拟面试报告。"""
-    target_role: str = Field(description="面试的目标岗位")
-    target_industry: str = Field(description="面试的目标行业")
-    interviewer_persona: str = Field(description="面试官人设描述（行业资深人士）")
-    questions: list[InterviewQuestion] = Field(min_length=3, max_length=3, description="3 轮追问")
-    professionalism_gaps: list[ProfessionalismGap] = Field(
-        min_length=1, description="专业度缺口分析"
-    )
+    """面试结束后的最终报告。"""
+    professionalism_gaps: list[ProfessionalismGap] = Field(min_length=1)
     overall_readiness: int = Field(ge=0, le=100, description="面试准备度评分 0-100")
     verdict: str = Field(description="总体判断 — 直说，不留情面")
     preparation_priorities: list[str] = Field(description="按优先级排列的备面重点")
+
+class InterviewSession(BaseModel):
+    """Agent 5 的完整面试会话。"""
+    session_id: str
+    target_role: str
+    target_industry: str
+    interviewer_persona: str = Field(default="", description="面试官人设")
+    status: str = Field(default="pending", description="pending/round_1/round_2/round_3/completed")
+    current_round: int = Field(default=0, ge=0, le=3)
+    turns: list[InterviewTurn] = Field(default_factory=list)
+    report: InterviewReport | None = Field(default=None, description="面试结束后生成")
 
 
 # ── Pipeline Result ─────────────────────────────────────────────────
 
 class PipelineResult(BaseModel):
-    """完整流水线输出 — 包含所有 5 个 Agent 的结果。"""
+    """流水线输出 — 前 4 个 Agent 的结果 + 面试会话 ID。"""
     talent_profile: TalentProfile
     industry_match: IndustryMatch
     transition_plan: TransitionPlan
     polished_resume: PolishedResume
-    interview_report: InterviewReport
+    interview_session_id: str | None = Field(
+        default=None, description="面试会话 ID，用于启动多轮面试"
+    )
