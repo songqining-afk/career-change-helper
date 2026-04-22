@@ -20,7 +20,7 @@ async def test_analyze_validation_error():
     """Missing required field should return 422."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/api/analyze", json=)
+        resp = await client.post("/api/analyze", json={})
     assert resp.status_code == 422
 
 

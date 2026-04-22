@@ -37,13 +37,16 @@ Multi-Agent 转行助手后端 — 从职场资产评估到简历精修的全流
 ## Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/career-change-helper.git
+git clone https://github.com/songqining-afk/career-change-helper.git
 cd career-change-helper
 
 pip install -r requirements.txt
 
 cp .env.example .env
 # Edit .env with your API keys (ANTHROPIC_API_KEY, OPENROUTER_API_KEY)
+
+cp config/models.yaml.example config/models.yaml
+# (Optional) Edit config/models.yaml to customize model routing
 ```
 
 ### CLI 文字面试（推荐）
