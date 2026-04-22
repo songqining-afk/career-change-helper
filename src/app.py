@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="转行帮 CareerChange Helper",
-    description="Multi-Agent 转行助手 API — 从职场资产评估到简历精修",
+    description="Multi-Agent 转行助手 API — 从职场资产评估到模拟面试",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -44,7 +44,7 @@ async def health():
 
 @app.post("/api/analyze", response_model=PipelineResult)
 async def analyze(user_input: UserInput):
-    """Run the full 4-agent pipeline."""
+    """Run the full 5-agent pipeline."""
     result = await run_pipeline(user_input)
 
     if not result.success:
@@ -63,8 +63,11 @@ async def analyze(user_input: UserInput):
 
 @app.post("/api/analyze/step/{step}")
 async def analyze_step(step: int, user_input: UserInput):
-    """Run a single agent step (1-4) for debugging/testing."""
-    from src.agents import ProfileAnalyzer, MarketMatcher, StrategyArchitect, CVOptimizer
+    """Run a single agent step (1-5) for debugging/testing."""
+    from src.agents import (
+        ProfileAnalyzer, MarketMatcher, StrategyArchitect,
+        CVOptimizer, InterviewSimulator,
+    )
 
     if step == 1:
         agent = ProfileAnalyzer()
@@ -88,4 +91,10 @@ async def analyze_step(step: int, user_input: UserInput):
         optimizer = CVOptimizer()
         return (await optimizer.analyze(user_input, profile, plan)).model_dump()
 
-    raise HTTPException(status_code=400, detail="Step must be 1-4")
+    optimizer = CVOptimizer()
+    resume = await optimizer.analyze(user_input, profile, plan)
+    if step == 5:
+        interviewer = InterviewSimulator()
+        return (await interviewer.analyze(industry, resume)).model_dump()
+
+    raise HTTPException(status_code=400, detail="Step must be 1-5")

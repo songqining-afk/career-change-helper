@@ -26,6 +26,11 @@ Multi-Agent 转行助手后端 — 从职场资产评估到简历精修的全流
 ┌───────────────────────────────────┐
 │  Agent 4: 简历润色助手             │  OpenRouter (Gemma)
 │  CV Optimizer                     │  (逐段对比 + ATS优化 + 叙事重构)
+└──────────────┬────────────────────┘
+               ▼
+┌───────────────────────────────────┐
+│  Agent 5: 模拟面试专家             │  Anthropic Claude
+│  Interview Simulator              │  (3轮追问 + 专业度缺口 + 备面优先级)
 └───────────────────────────────────┘
 ```
 
@@ -49,8 +54,8 @@ pytest tests/ -v
 ## API
 
 ```
-POST /api/analyze          — Full 4-agent pipeline
-POST /api/analyze/step/1   — Single agent (1-4) for debugging
+POST /api/analyze          — Full 5-agent pipeline
+POST /api/analyze/step/1   — Single agent (1-5) for debugging
 GET  /health               — Health check
 ```
 
@@ -73,6 +78,7 @@ src/
     market_matcher.py       Agent 2: 市场匹配引擎
     strategy_architect.py   Agent 3: 路径规划架构师
     cv_optimizer.py         Agent 4: 简历润色助手
+    interview_simulator.py  Agent 5: 模拟面试专家
     base.py                 Agent 基类
   schemas/models.py         Pydantic 数据模型（Agent 间的契约）
   prompts/                  System prompts（每个 Agent 的指令）
@@ -85,7 +91,7 @@ tests/                      测试套件
 
 ## Multi-LLM Routing
 
-- Agents 1-3 (reasoning): Anthropic Claude
+- Agents 1-3, 5 (reasoning): Anthropic Claude
 - Agent 4 (CV optimization): OpenRouter Gemma 27B (cost-efficient)
 
 ## License

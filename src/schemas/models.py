@@ -1,7 +1,7 @@
 """
-Pydantic models — the contract between all 4 agents.
+Pydantic models — the contract between all 5 agents.
 
-Data flows:  UserInput → TalentProfile → IndustryMatch → TransitionPlan → PolishedResume
+Data flows:  UserInput → TalentProfile → IndustryMatch → TransitionPlan → PolishedResume → InterviewReport
 """
 
 from __future__ import annotations
@@ -114,11 +114,43 @@ class PolishedResume(BaseModel):
     ats_tips: list[str] = Field(default_factory=list, description="ATS 系统优化建议")
 
 
+# ── Agent 5 Output: 模拟面试专家 (Interview Simulator) ──────────────
+
+class InterviewQuestion(BaseModel):
+    """单个面试追问。"""
+    round_number: int = Field(ge=1, le=3, description="第几轮追问 (1-3)")
+    question: str = Field(description="面试官的问题")
+    intent: str = Field(description="这个问题想考察什么")
+    ideal_answer_points: list[str] = Field(description="理想回答应包含的要点")
+    common_pitfalls: list[str] = Field(default_factory=list, description="转行者常见的踩坑回答")
+
+class ProfessionalismGap(BaseModel):
+    """专业度缺口分析。"""
+    area: str = Field(description="缺口领域，如'行业术语'、'业务理解'、'技术深度'")
+    severity: str = Field(description="严重程度: low/medium/high")
+    detail: str = Field(description="具体表现 — 哪些地方暴露了外行身份")
+    fix_suggestion: str = Field(description="如何弥补")
+
+class InterviewReport(BaseModel):
+    """Agent 5 (模拟面试专家) 的输出 — 模拟面试报告。"""
+    target_role: str = Field(description="面试的目标岗位")
+    target_industry: str = Field(description="面试的目标行业")
+    interviewer_persona: str = Field(description="面试官人设描述（行业资深人士）")
+    questions: list[InterviewQuestion] = Field(min_length=3, max_length=3, description="3 轮追问")
+    professionalism_gaps: list[ProfessionalismGap] = Field(
+        min_length=1, description="专业度缺口分析"
+    )
+    overall_readiness: int = Field(ge=0, le=100, description="面试准备度评分 0-100")
+    verdict: str = Field(description="总体判断 — 直说，不留情面")
+    preparation_priorities: list[str] = Field(description="按优先级排列的备面重点")
+
+
 # ── Pipeline Result ─────────────────────────────────────────────────
 
 class PipelineResult(BaseModel):
-    """完整流水线输出 — 包含所有 4 个 Agent 的结果。"""
+    """完整流水线输出 — 包含所有 5 个 Agent 的结果。"""
     talent_profile: TalentProfile
     industry_match: IndustryMatch
     transition_plan: TransitionPlan
     polished_resume: PolishedResume
+    interview_report: InterviewReport

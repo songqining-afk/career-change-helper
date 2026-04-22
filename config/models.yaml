@@ -10,6 +10,7 @@ core:
     - profile_analyzer
     - market_matcher
     - strategy_architect
+    - interview_simulator
 
 # Agent 4: 简历润色助手 (CV Optimizer) — text optimization
 light:

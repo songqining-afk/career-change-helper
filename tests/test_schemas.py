@@ -5,6 +5,7 @@ from src.schemas.models import (
     UserInput, TalentProfile, IndustryMatch, IndustryFit,
     TransitionPlan, Phase, PolishedResume, ResumeSection,
     Skill, SkillCategory, PersonalityTrait, Constraint,
+    InterviewReport, InterviewQuestion, ProfessionalismGap,
     PipelineResult,
 )
 
@@ -109,6 +110,44 @@ def test_polished_resume():
     )
     assert len(resume.sections) == 1
 
+def test_interview_report():
+    report = InterviewReport(
+        target_role="产品经理",
+        target_industry="互联网",
+        interviewer_persona="某头部互联网公司产品VP，10年经验",
+        questions=[
+            InterviewQuestion(
+                round_number=i,
+                question=f"第{i}轮问题",
+                intent=f"考察意图{i}",
+                ideal_answer_points=[f"要点{i}"],
+            )
+            for i in range(1, 4)
+        ],
+        professionalism_gaps=[
+            ProfessionalismGap(
+                area="行业术语",
+                severity="high",
+                detail="无法自然使用DAU/MAU等核心指标",
+                fix_suggestion="阅读行业报告并练习使用",
+            )
+        ],
+        overall_readiness=35,
+        verdict="准备严重不足，建议至少再准备2个月",
+        preparation_priorities=["掌握核心行业术语", "做3个产品分析案例"],
+    )
+    assert len(report.questions) == 3
+    assert report.overall_readiness == 35
+    assert report.professionalism_gaps[0].severity == "high"
+
+
+def test_interview_question_round_bounds():
+    with pytest.raises(Exception):
+        InterviewQuestion(
+            round_number=4, question="q", intent="i",
+            ideal_answer_points=["p"],
+        )
+
 
 def test_pipeline_result():
     profile = TalentProfile(summary="test")
@@ -128,10 +167,31 @@ def test_pipeline_result():
         )],
         overall_narrative="n",
     )
+    interview = InterviewReport(
+        target_role="PM", target_industry="Tech",
+        interviewer_persona="VP",
+        questions=[
+            InterviewQuestion(
+                round_number=i, question=f"q{i}", intent=f"i{i}",
+                ideal_answer_points=[f"p{i}"],
+            )
+            for i in range(1, 4)
+        ],
+        professionalism_gaps=[
+            ProfessionalismGap(
+                area="术语", severity="medium",
+                detail="d", fix_suggestion="f",
+            )
+        ],
+        overall_readiness=50,
+        verdict="v",
+        preparation_priorities=["p1"],
+    )
     result = PipelineResult(
         talent_profile=profile,
         industry_match=match,
         transition_plan=plan,
         polished_resume=resume,
+        interview_report=interview,
     )
-    assert result.talent_profile.summary == "test"
+    assert result.interview_report.overall_readiness == 50

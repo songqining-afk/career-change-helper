@@ -1,7 +1,7 @@
 """
-Pipeline — orchestrates the 4-agent workflow.
+Pipeline — orchestrates the 5-agent workflow.
 
-    UserInput → ProfileAnalyzer → MarketMatcher → StrategyArchitect → CVOptimizer
+    UserInput → ProfileAnalyzer → MarketMatcher → StrategyArchitect → CVOptimizer → InterviewSimulator
 """
 
 from __future__ import annotations
@@ -10,10 +10,13 @@ import logging
 import time
 from dataclasses import dataclass, field
 
-from src.agents import ProfileAnalyzer, MarketMatcher, StrategyArchitect, CVOptimizer
+from src.agents import (
+    ProfileAnalyzer, MarketMatcher, StrategyArchitect,
+    CVOptimizer, InterviewSimulator,
+)
 from src.schemas.models import (
     UserInput, TalentProfile, IndustryMatch,
-    TransitionPlan, PolishedResume, PipelineResult,
+    TransitionPlan, PolishedResume, InterviewReport, PipelineResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,7 +43,7 @@ class PipelineRun:
 
 
 async def run_pipeline(user_input: UserInput) -> PipelineRun:
-    """Execute the full 4-agent pipeline sequentially."""
+    """Execute the full 5-agent pipeline sequentially."""
     run = PipelineRun()
     t_start = time.monotonic()
 
@@ -92,11 +95,24 @@ async def run_pipeline(user_input: UserInput) -> PipelineRun:
         run.total_duration_s = time.monotonic() - t_start
         return run
 
+    # ── Agent 5: 模拟面试专家 (Interview Simulator) ───────────
+    t0 = time.monotonic()
+    try:
+        interviewer = InterviewSimulator()
+        interview = await interviewer.analyze(industry, resume)
+        run.steps.append(StepResult("模拟面试专家", time.monotonic() - t0, True))
+    except Exception as e:
+        run.steps.append(StepResult("模拟面试专家", time.monotonic() - t0, False, str(e)))
+        logger.error(f"Agent 5 failed: {e}")
+        run.total_duration_s = time.monotonic() - t_start
+        return run
+
     run.result = PipelineResult(
         talent_profile=profile,
         industry_match=industry,
         transition_plan=plan,
         polished_resume=resume,
+        interview_report=interview,
     )
     run.total_duration_s = time.monotonic() - t_start
     logger.info(f"Pipeline complete in {run.total_duration_s:.1f}s")
