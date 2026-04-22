@@ -1,18 +1,19 @@
 # Multi-LLM Configuration for 转行帮
+# Copy this file to config/models.yaml and fill in your choices.
 
-# Agents 1-3, 5: deep reasoning + interview (Anthropic SDK)
+# Agents 1-3, 5: deep reasoning + interview
 core:
   provider: anthropic
-  model: claude-opus-4-7
+  model: your-model-here
   agents:
     - profile_analyzer
     - market_matcher
     - strategy_architect
     - interview_simulator
 
-# Agent 4: text optimization (OpenRouter)
+# Agent 4: text optimization
 light:
   provider: openrouter
-  model: google/gemma-3-27b-it:free
+  model: your-model-here
   agents:
     - cv_optimizer

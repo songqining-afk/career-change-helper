@@ -23,8 +23,11 @@ env/
 htmlcov/
 .coverage
 
-# Env
+# Env & secrets
 .env
+
+# Model config (contains provider/model choices)
+config/models.yaml
 
 # OS
 .DS_Store
