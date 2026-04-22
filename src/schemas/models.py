@@ -96,7 +96,7 @@ class TransitionPlan(BaseModel):
     plan_b: str = Field(default="", description="备选方案")
 
 
-# ── Agent 4 Output: 内容重构助手 (Content Optimizer) ────────────────
+# ── Agent 4 Output: 简历润色助手 (CV Optimizer) ─────────────────────
 
 class ResumeSection(BaseModel):
     section: str = Field(description="段落名称：个人简介/工作经历/项目经验/技能等")
@@ -105,7 +105,7 @@ class ResumeSection(BaseModel):
     changes_made: list[str] = Field(description="修改说明")
 
 class PolishedResume(BaseModel):
-    """Agent 4 (内容重构助手) 的输出 — 精修后的简历。"""
+    """Agent 4 (简历润色助手) 的输出 — 精修后的简历。"""
     target_role: str
     target_industry: str
     sections: list[ResumeSection]

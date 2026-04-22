@@ -11,9 +11,9 @@ core:
     - market_matcher
     - strategy_architect
 
-# Agent 4: 内容重构助手 (Content Optimizer) — text optimization
+# Agent 4: 简历润色助手 (CV Optimizer) — text optimization
 light:
   provider: openrouter
   model: google/gemma-3-27b-it:free
   agents:
-    - content_optimizer
+    - cv_optimizer

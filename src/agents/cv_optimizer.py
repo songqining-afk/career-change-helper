@@ -1,4 +1,4 @@
-"""Agent 4: 内容重构助手 (Content Optimizer)."""
+"""Agent 4: 简历润色助手 (CV Optimizer)."""
 
 import json
 from src.agents.base import BaseAgent
@@ -7,9 +7,9 @@ from src.schemas.models import (
 )
 
 
-class ContentOptimizer(BaseAgent):
-    name = "内容重构助手"
-    prompt_file = "content_optimizer.md"
+class CVOptimizer(BaseAgent):
+    name = "简历润色助手"
+    prompt_file = "cv_optimizer.md"
     provider = "openrouter"
 
     async def analyze(

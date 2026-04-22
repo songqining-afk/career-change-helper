@@ -24,8 +24,8 @@ Multi-Agent 转行助手后端 — 从职场资产评估到简历精修的全流
 └──────────────┬────────────────────┘
                ▼
 ┌───────────────────────────────────┐
-│  Agent 4: 内容重构助手             │  OpenRouter (Gemma)
-│  Content Optimizer                │  (逐段对比 + ATS优化 + 叙事重构)
+│  Agent 4: 简历润色助手             │  OpenRouter (Gemma)
+│  CV Optimizer                     │  (逐段对比 + ATS优化 + 叙事重构)
 └───────────────────────────────────┘
 ```
 
@@ -72,7 +72,7 @@ src/
     profile_analyzer.py     Agent 1: 能力画像专家
     market_matcher.py       Agent 2: 市场匹配引擎
     strategy_architect.py   Agent 3: 路径规划架构师
-    content_optimizer.py    Agent 4: 内容重构助手
+    cv_optimizer.py         Agent 4: 简历润色助手
     base.py                 Agent 基类
   schemas/models.py         Pydantic 数据模型（Agent 间的契约）
   prompts/                  System prompts（每个 Agent 的指令）
@@ -86,7 +86,7 @@ tests/                      测试套件
 ## Multi-LLM Routing
 
 - Agents 1-3 (reasoning): Anthropic Claude
-- Agent 4 (content optimization): OpenRouter Gemma 27B (cost-efficient)
+- Agent 4 (CV optimization): OpenRouter Gemma 27B (cost-efficient)
 
 ## License
 

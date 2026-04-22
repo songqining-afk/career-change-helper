@@ -1,7 +1,7 @@
 """
 Pipeline — orchestrates the 4-agent workflow.
 
-    UserInput → ProfileAnalyzer → MarketMatcher → StrategyArchitect → ContentOptimizer
+    UserInput → ProfileAnalyzer → MarketMatcher → StrategyArchitect → CVOptimizer
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 
-from src.agents import ProfileAnalyzer, MarketMatcher, StrategyArchitect, ContentOptimizer
+from src.agents import ProfileAnalyzer, MarketMatcher, StrategyArchitect, CVOptimizer
 from src.schemas.models import (
     UserInput, TalentProfile, IndustryMatch,
     TransitionPlan, PolishedResume, PipelineResult,
@@ -80,14 +80,14 @@ async def run_pipeline(user_input: UserInput) -> PipelineRun:
         run.total_duration_s = time.monotonic() - t_start
         return run
 
-    # ── Agent 4: 内容重构助手 (Content Optimizer) ──────────────
+    # ── Agent 4: 简历润色助手 (CV Optimizer) ────────────────────
     t0 = time.monotonic()
     try:
-        optimizer = ContentOptimizer()
+        optimizer = CVOptimizer()
         resume = await optimizer.analyze(user_input, profile, plan)
-        run.steps.append(StepResult("内容重构助手", time.monotonic() - t0, True))
+        run.steps.append(StepResult("简历润色助手", time.monotonic() - t0, True))
     except Exception as e:
-        run.steps.append(StepResult("内容重构助手", time.monotonic() - t0, False, str(e)))
+        run.steps.append(StepResult("简历润色助手", time.monotonic() - t0, False, str(e)))
         logger.error(f"Agent 4 failed: {e}")
         run.total_duration_s = time.monotonic() - t_start
         return run

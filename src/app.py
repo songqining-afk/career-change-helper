@@ -64,7 +64,7 @@ async def analyze(user_input: UserInput):
 @app.post("/api/analyze/step/{step}")
 async def analyze_step(step: int, user_input: UserInput):
     """Run a single agent step (1-4) for debugging/testing."""
-    from src.agents import ProfileAnalyzer, MarketMatcher, StrategyArchitect, ContentOptimizer
+    from src.agents import ProfileAnalyzer, MarketMatcher, StrategyArchitect, CVOptimizer
 
     if step == 1:
         agent = ProfileAnalyzer()
@@ -85,7 +85,7 @@ async def analyze_step(step: int, user_input: UserInput):
     architect = StrategyArchitect()
     plan = await architect.analyze(profile, industry)
     if step == 4:
-        optimizer = ContentOptimizer()
+        optimizer = CVOptimizer()
         return (await optimizer.analyze(user_input, profile, plan)).model_dump()
 
     raise HTTPException(status_code=400, detail="Step must be 1-4")
