@@ -24,7 +24,7 @@ Multi-Agent 转行助手后端 — 从职场资产评估到简历精修的全流
 └──────────────┬────────────────────┘
                ▼
 ┌───────────────────────────────────┐
-│  Agent 4: 简历润色助手             │  OpenRouter (Gemma)
+│  Agent 4: 简历润色助手             │  Anthropic Claude
 │  CV Optimizer                     │  (逐段对比 + ATS优化 + 叙事重构)
 └──────────────┬────────────────────┘
                ▼
@@ -43,19 +43,44 @@ cd career-change-helper
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env with your API keys (ANTHROPIC_API_KEY, OPENROUTER_API_KEY)
+# Edit .env with your API key (ANTHROPIC_API_KEY)
 
 cp config/models.yaml.example config/models.yaml
 # (Optional) Edit config/models.yaml to customize model routing
 ```
 
-### CLI 文字面试（推荐）
+### Web UI（推荐）
+
+**一键启动：**
+```bash
+bash scripts/start.sh
+```
+
+访问 `http://localhost:8000`，通过 Web 界面完成全流程分析 + 模拟面试。
+
+**开发模式（前后端分离）：**
+```bash
+# Terminal 1: 启动后端
+uvicorn src.app:app --reload --port 8000
+
+# Terminal 2: 启动前端开发服务器
+cd web
+npm install
+npm run dev  # 访问 http://localhost:3000
+```
+
+### CLI 交互式分析
 
 ```bash
 python3 src/cli_interview.py
 ```
 
-交互式终端面试：输入简历 → 4-agent 分析 → 3 轮压力面试 → 最终报告。
+交互式终端分析：输入简历 → 4-agent 逐步分析 → 每个 Agent 支持无限轮次修改 → 简历改写对话。
+
+**特性：**
+- 每个 Agent 输出后，可以无限轮次提供修改意见，直到满意为止
+- 回车确认后进入下一个 Agent
+- 断点续跑：中途退出后可从上次位置继续
 
 ### REST API
 
@@ -97,7 +122,7 @@ src/
     base.py                 Agent 基类
   schemas/models.py         Pydantic 数据模型（Agent 间的契约）
   prompts/                  System prompts（每个 Agent 的指令）
-  llm/client.py             LLM 客户端（Anthropic SDK + OpenRouter）
+  llm/client.py             LLM 客户端（Anthropic SDK）
   pipeline.py               流水线编排器（Agent 1-4）
   cli_interview.py          CLI 文字面试入口（Agent 5 交互）
   app.py                    FastAPI REST API 入口
@@ -105,10 +130,18 @@ config/                     模型路由配置
 tests/                      测试套件
 ```
 
-## Multi-LLM Routing
+## LLM
 
-- Agents 1-3, 5 (reasoning): Anthropic Claude Opus 4.7 (official SDK, adaptive thinking)
-- Agent 4 (CV optimization): OpenRouter Gemma 27B (cost-efficient)
+All agents use **Anthropic Claude Opus 4.7** (official SDK, adaptive thinking).
+
+**Automatic fallback**: If Claude doesn't respond within **30 seconds** (configurable via `CLAUDE_TIMEOUT`), the system automatically switches to **DeepSeek** for that request. This ensures fast response times even when Claude is slow.
+
+To configure:
+```bash
+# .env
+CLAUDE_TIMEOUT=30  # seconds (default: 30)
+DEEPSEEK_API_KEY=your_key_here  # enables fallback
+```
 
 ## License
 

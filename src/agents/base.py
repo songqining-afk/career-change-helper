@@ -1,5 +1,5 @@
 """
-Base agent — shared logic for all 4 agents.
+Base agent — shared logic for all agents.
 """
 
 from __future__ import annotations
@@ -21,11 +21,10 @@ class BaseAgent:
 
     name: str = "base"
     prompt_file: str = ""
-    provider: str = "anthropic"
     model: str | None = None  # defaults to claude-opus-4-7 via LLMClient
 
     def __init__(self, llm: LLMClient | None = None):
-        self.llm = llm or LLMClient(provider=self.provider, model=self.model)
+        self.llm = llm or LLMClient(model=self.model)
         self._system_prompt: str | None = None
 
     @property

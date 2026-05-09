@@ -1,19 +1,13 @@
-# Multi-LLM Configuration for 转行帮
-# Copy this file to config/models.yaml and fill in your choices.
+# LLM Configuration for 转行帮
+# Copy this file to config/models.yaml and customize if needed.
 
-# Agents 1-3, 5: deep reasoning + interview
-core:
+# All agents use Claude via Anthropic SDK
+default:
   provider: anthropic
-  model: your-model-here
+  model: claude-opus-4-7
   agents:
     - profile_analyzer
     - market_matcher
     - strategy_architect
-    - interview_simulator
-
-# Agent 4: text optimization
-light:
-  provider: openrouter
-  model: your-model-here
-  agents:
     - cv_optimizer
+    - interview_simulator

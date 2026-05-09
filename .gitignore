@@ -26,8 +26,25 @@ htmlcov/
 # Env & secrets
 .env
 
+# Claude Code local config
+.claude/
+
+# Local launcher scripts
+start.bat
+start.ps1
+创建桌面快捷方式.bat
+创建桌面快捷方式.ps1
+logs/
+
 # Model config (contains provider/model choices)
 config/models.yaml
+
+# Runtime data (SQLite, ChromaDB, uploads)
+data/
+
+# Frontend build output
+web/dist/
+web/node_modules/
 
 # OS
 .DS_Store

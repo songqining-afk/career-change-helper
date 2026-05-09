@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 class UserInput(BaseModel):
     """Raw input from the user — resume text + free-form background."""
+    user_id: str = Field(default="default", description="用户 ID，用于持久记忆")
     resume_text: str = Field(..., description="简历原文或粘贴内容")
     background: str = Field(default="", description="补充经历、性格、偏好等自由描述")
     constraints: str = Field(default="", description="约束条件：地域、薪资、家庭等")
@@ -74,6 +75,10 @@ class IndustryMatch(BaseModel):
         description="明确不推荐的方向及原因"
     )
     market_insight: str = Field(default="", description="当前就业市场整体洞察")
+    chosen_target: IndustryFit | None = Field(
+        default=None,
+        description="用户在 Agent 2 后选择的目标方向（交互式流程中由用户确认）"
+    )
 
 
 # ── Agent 3 Output: 路径规划架构师 (Strategy Architect) ─────────────
@@ -138,17 +143,17 @@ class InterviewTurn(BaseModel):
 
 class ProfessionalismGap(BaseModel):
     """专业度缺口分析。"""
-    area: str = Field(description="缺口领域，如'行业术语'、'业务理解'、'技术深度'")
-    severity: str = Field(description="严重程度: low/medium/high")
-    detail: str = Field(description="具体表现 — 哪些地方暴露了外行身份")
-    fix_suggestion: str = Field(description="如何弥补")
+    area: str = Field(default="", description="缺口领域，如'行业术语'、'业务理解'、'技术深度'")
+    severity: str = Field(default="medium", description="严重程度: low/medium/high")
+    detail: str = Field(default="", description="具体表现 — 哪些地方暴露了外行身份")
+    fix_suggestion: str = Field(default="", description="如何弥补")
 
 class InterviewReport(BaseModel):
     """面试结束后的最终报告。"""
-    professionalism_gaps: list[ProfessionalismGap] = Field(min_length=1)
-    overall_readiness: int = Field(ge=0, le=100, description="面试准备度评分 0-100")
-    verdict: str = Field(description="总体判断 — 直说，不留情面")
-    preparation_priorities: list[str] = Field(description="按优先级排列的备面重点")
+    professionalism_gaps: list[ProfessionalismGap] = Field(default_factory=list)
+    overall_readiness: int = Field(default=50, ge=0, le=100, description="面试准备度评分 0-100")
+    verdict: str = Field(default="", description="总体判断 — 直说，不留情面")
+    preparation_priorities: list[str] = Field(default_factory=list, description="按优先级排列的备面重点")
 
 class InterviewSession(BaseModel):
     """Agent 5 的完整面试会话。"""

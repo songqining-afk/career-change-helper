@@ -1,0 +1,13 @@
+.venv/
+.env
+.claude/
+data/
+web/node_modules/
+web/dist/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+*.md
+logs/
+err.txt
