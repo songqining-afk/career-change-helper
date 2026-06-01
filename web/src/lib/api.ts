@@ -1,5 +1,5 @@
 /**
- * API client for 转行帮 backend
+ * API client for 转 行 帮 backend
  */
 
 const BASE = ''  // proxied via vite
@@ -74,11 +74,10 @@ export async function runStep(
 }
 
 export async function finalizeSession(sessionId: string) {
-  const res = await fetch(`${BASE}/api/analyze/interactive/finalize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(sessionId),
-  })
+  const res = await fetch(
+    `${BASE}/api/analyze/interactive/finalize?session_id=${encodeURIComponent(sessionId)}`,
+    { method: 'POST' }
+  )
   if (!res.ok) throw new Error(`Finalize failed: ${res.status}`)
   return res.json()
 }

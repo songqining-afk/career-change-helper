@@ -39,16 +39,18 @@ from src.pipeline import (
     run_interactive_step,
     finalize_interactive_pipeline,
     InteractivePipelineState,
+    restore_interactive_state_from_db,
 )
 from src.agents.interview_simulator import InterviewSimulator
 from src import interview_store
 from src.memory.database import (
     init_db, load_memory, list_analyses,
     load_profile, save_profile, load_preferences, save_preference,
-    delete_preference, list_events,
+    delete_preference, list_events, get_latest_snapshot,
     save_session, load_session, get_active_session, abandon_session,
 )
 from src.memory.models import UserProfile, UserPreference, PreferenceSource
+from src.memory.migrate import migrate_legacy_if_needed
 from src.knowledge import KnowledgeStore, extract_text, chunk_text
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
@@ -114,8 +116,20 @@ async def analyze(user_input: UserInput):
 
 # ── Interactive Pipeline (step-by-step with user feedback) ─────────
 
-# In-memory state store (for demo; use Redis/DB in production)
+# In-memory state store (hydrated from DB on miss — see _get_or_restore_interactive_state)
 _interactive_sessions: dict[str, InteractivePipelineState] = {}
+
+
+async def _get_or_restore_interactive_state(session_id: str) -> InteractivePipelineState:
+    """Return live pipeline state, rebuilding from SQLite if the process was restarted."""
+    state = _interactive_sessions.get(session_id)
+    if state is not None:
+        return state
+    restored = await restore_interactive_state_from_db(session_id)
+    if restored is None:
+        raise HTTPException(404, "Interactive session not found")
+    _interactive_sessions[session_id] = restored
+    return restored
 
 
 class InteractiveStartRequest(BaseModel):
@@ -168,9 +182,7 @@ class InteractiveStepResponse(BaseModel):
 @app.post("/api/analyze/interactive/step", response_model=InteractiveStepResponse)
 async def interactive_step(req: InteractiveStepRequest):
     """Run a single agent step in interactive mode."""
-    state = _interactive_sessions.get(req.session_id)
-    if not state:
-        raise HTTPException(404, "Interactive session not found")
+    state = await _get_or_restore_interactive_state(req.session_id)
 
     agent_names = ["", "能力画像专家", "市场匹配引擎", "路径规划架构师", "简历润色助手"]
 
@@ -214,15 +226,17 @@ class InteractiveFinalizeResponse(BaseModel):
 
 
 @app.post("/api/analyze/interactive/finalize", response_model=InteractiveFinalizeResponse)
-async def interactive_finalize(session_id: str):
-    """Finalize interactive pipeline and save results."""
-    state = _interactive_sessions.get(session_id)
-    if not state:
-        raise HTTPException(404, "Interactive session not found")
+async def interactive_finalize(session_id: str = Query(..., min_length=1)):
+    """Finalize interactive pipeline and save results (query: ?session_id=...)."""
+    state = await _get_or_restore_interactive_state(session_id)
 
     run = await finalize_interactive_pipeline(state)
+    if run.result is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Not all pipeline steps are complete; cannot finalize",
+        )
 
-    # Mark session as completed in DB
     db_session = await load_session(session_id)
     if db_session:
         await save_session(
@@ -427,15 +441,18 @@ async def interview_status(session_id: str):
 @app.get("/api/memory/{user_id}")
 async def memory_get(user_id: str):
     """Get user's complete 3-layer memory."""
+    await migrate_legacy_if_needed(user_id)
     profile = await load_profile(user_id)
     prefs = await load_preferences(user_id)
     events = await list_events(user_id, limit=20)
+    snapshot = await get_latest_snapshot(user_id)
     legacy = await load_memory(user_id)
 
     return {
         "user_id": user_id,
         "has_profile": profile is not None,
         "profile": profile.model_dump() if profile else None,
+        "latest_snapshot": snapshot.model_dump() if snapshot else None,
         "preferences": [p.model_dump() for p in prefs],
         "recent_events": [e.model_dump() for e in events],
         "legacy_memory": legacy.model_dump() if legacy else None,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Loader2, Send, MessageSquare, Home, Check, RotateCcw } from 'lucide-react'
+import { Loader2, Send, MessageSquare, Home, Check, RotateCcw, Briefcase, User } from 'lucide-react'
 import { startInterview, replyInterview } from '../lib/api'
 import type { UserInput, InterviewReplyResponse } from '../lib/api'
 import { useToast } from '../components/Toast'
@@ -98,14 +98,23 @@ export default function InterviewPage() {
     }
   }
 
+  if (!sessionId && loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 pt-14 text-text-secondary text-sm">
+        <Loader2 className="w-7 h-7 animate-spin text-accent" strokeWidth={1.75} />
+        正在准备面试…
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <div className="sticky top-14 z-10 bg-surface-0/80 backdrop-blur-xl border-b border-border-subtle px-6 py-3">
+      <div className="sticky top-14 z-10 border-b border-border-subtle bg-surface-0/80 backdrop-blur-xl backdrop-saturate-150 px-6 py-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
-              <MessageSquare className="w-4 h-4 text-accent" />
+            <div className="w-8 h-8 rounded-lg bg-surface-1 flex items-center justify-center ring-1 ring-black/[0.06] shadow-sm">
+              <MessageSquare className="w-4 h-4 text-accent" strokeWidth={1.75} />
             </div>
             <div>
               <h1 className="font-medium text-sm">模拟面试</h1>
@@ -135,26 +144,26 @@ export default function InterviewPage() {
           <div key={i} className="space-y-3">
             {/* Question */}
             <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center text-sm flex-shrink-0 border border-border-subtle">
-                👔
+              <div className="w-8 h-8 rounded-full bg-surface-1 flex items-center justify-center text-sm flex-shrink-0 ring-1 ring-black/[0.06] shadow-sm">
+                <Briefcase className="w-4 h-4 text-accent" strokeWidth={1.75} />
               </div>
-              <div className="flex-1 rounded-2xl rounded-tl-sm bg-surface-1 border border-border-subtle p-4">
+              <div className="flex-1 rounded-2xl rounded-tl-md bg-surface-1 ring-1 ring-black/[0.06] shadow-sm p-4">
                 <p className="text-sm text-text-primary leading-relaxed">{turn.question}</p>
               </div>
             </div>
 
             {/* Answer */}
             <div className="flex gap-3 justify-end">
-              <div className="flex-1 max-w-[80%] rounded-2xl rounded-tr-sm bg-accent/10 border border-accent/20 p-4">
+              <div className="flex-1 max-w-[80%] rounded-2xl rounded-tr-md bg-accent/[0.08] ring-1 ring-accent/18 p-4">
                 <p className="text-sm text-text-primary leading-relaxed">{turn.answer}</p>
               </div>
-              <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-sm flex-shrink-0 border border-accent/20">
-                👤
+              <div className="w-8 h-8 rounded-full bg-surface-1 flex items-center justify-center text-sm flex-shrink-0 ring-1 ring-accent/15 shadow-sm">
+                <User className="w-4 h-4 text-accent" strokeWidth={1.75} />
               </div>
             </div>
 
             {/* Feedback */}
-            <div className="ml-11 rounded-xl bg-surface-2 border border-border-subtle p-4 space-y-3">
+            <div className="ml-11 rounded-xl bg-surface-1 ring-1 ring-border-subtle p-4 space-y-3 shadow-sm">
               <div className="flex items-center gap-3">
                 <ScoreBadge score={turn.feedback.professionalism_score} />
               </div>
@@ -184,7 +193,7 @@ export default function InterviewPage() {
               )}
               {turn.feedback.follow_up && (
                 <p className="text-xs text-text-muted italic border-t border-border-subtle pt-2">
-                  💡 {turn.feedback.follow_up}
+                  {turn.feedback.follow_up}
                 </p>
               )}
             </div>
@@ -194,10 +203,10 @@ export default function InterviewPage() {
         {/* Current question */}
         {!isDone && currentQuestion && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center text-sm flex-shrink-0 border border-border-subtle">
-              👔
+            <div className="w-8 h-8 rounded-full bg-surface-1 flex items-center justify-center text-sm flex-shrink-0 ring-1 ring-black/[0.06] shadow-sm">
+              <Briefcase className="w-4 h-4 text-accent" strokeWidth={1.75} />
             </div>
-            <div className="flex-1 rounded-2xl rounded-tl-sm bg-surface-1 border border-border-subtle p-4">
+            <div className="flex-1 rounded-2xl rounded-tl-md bg-surface-1 ring-1 ring-black/[0.06] shadow-sm p-4">
               <p className="text-sm text-text-primary leading-relaxed">{currentQuestion}</p>
             </div>
           </div>
@@ -205,7 +214,7 @@ export default function InterviewPage() {
 
         {/* Input area */}
         {!isDone && currentQuestion && (
-          <div className="sticky bottom-4 rounded-2xl bg-surface-1 border border-border p-4 space-y-3">
+          <div className="sticky bottom-4 rounded-2xl bg-surface-1 ring-1 ring-black/[0.08] shadow-md p-4 space-y-3">
             <textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
@@ -216,14 +225,14 @@ export default function InterviewPage() {
                 }
               }}
               placeholder="输入你的回答... (Ctrl+Enter 提交)"
-              className="w-full h-28 bg-surface-0 border border-border-subtle rounded-xl p-3.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/40 resize-none transition-colors leading-relaxed"
+              className="w-full h-28 bg-surface-0 border border-border-subtle rounded-xl p-3.5 text-sm text-text-primary placeholder:text-text-muted/80 focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent/40 resize-none transition-shadow leading-relaxed"
               disabled={loading}
             />
             <div className="flex justify-end">
               <button
                 onClick={handleSubmit}
                 disabled={!answer.trim() || loading}
-                className="px-5 py-2 bg-accent hover:bg-accent-soft disabled:opacity-30 text-white font-medium rounded-xl transition-all text-sm flex items-center gap-2"
+                className="px-5 py-2 bg-accent hover:bg-accent-soft disabled:opacity-35 text-white font-medium rounded-xl transition-colors text-sm flex items-center gap-2 shadow-sm"
               >
                 {loading ? (
                   <>
@@ -243,12 +252,12 @@ export default function InterviewPage() {
 
         {/* Final report */}
         {isDone && report && (
-          <div className="rounded-2xl border border-success/30 bg-success/5 p-8 space-y-6 glow-success">
+          <div className="rounded-2xl ring-1 ring-success/25 bg-emerald-50/80 p-8 space-y-6 glow-success">
             <div className="text-center space-y-2">
-              <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center mx-auto">
-                <Check className="w-7 h-7 text-success" />
+              <div className="w-14 h-14 rounded-full bg-white ring-1 ring-success/20 flex items-center justify-center mx-auto shadow-sm">
+                <Check className="w-7 h-7 text-success" strokeWidth={1.75} />
               </div>
-              <h2 className="text-xl font-bold text-success">面试完成</h2>
+              <h2 className="text-xl font-semibold text-success tracking-tight">面试完成</h2>
             </div>
 
             <div className="space-y-5">
@@ -258,7 +267,7 @@ export default function InterviewPage() {
               </div>
 
               {report.summary && (
-                <div className="rounded-xl bg-surface-0 border border-border-subtle p-4">
+                <div className="rounded-xl bg-surface-0 ring-1 ring-border-subtle p-4">
                   <p className="text-sm text-text-secondary leading-relaxed">{String(report.summary)}</p>
                 </div>
               )}
@@ -268,7 +277,9 @@ export default function InterviewPage() {
                   <h3 className="text-xs font-semibold text-success uppercase tracking-wider mb-2">优势</h3>
                   <ul className="space-y-1.5">
                     {(report.strengths as string[]).map((s, i) => (
-                      <li key={i} className="text-sm text-text-secondary">✓ {s}</li>
+                      <li key={i} className="text-sm text-text-secondary pl-3 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1 before:h-1 before:rounded-full before:bg-success/50">
+                        {s}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -279,7 +290,9 @@ export default function InterviewPage() {
                   <h3 className="text-xs font-semibold text-warning uppercase tracking-wider mb-2">待提升</h3>
                   <ul className="space-y-1.5">
                     {(report.improvement_areas as string[]).map((a, i) => (
-                      <li key={i} className="text-sm text-text-secondary">⚠ {a}</li>
+                      <li key={i} className="text-sm text-text-secondary pl-3 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1 before:h-1 before:rounded-full before:bg-warning/50">
+                        {a}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -290,7 +303,9 @@ export default function InterviewPage() {
                   <h3 className="text-xs font-semibold text-accent uppercase tracking-wider mb-2">下一步建议</h3>
                   <ul className="space-y-1.5">
                     {(report.next_steps as string[]).map((n, i) => (
-                      <li key={i} className="text-sm text-text-secondary">→ {n}</li>
+                      <li key={i} className="text-sm text-text-secondary pl-3 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1 before:h-1 before:rounded-full before:bg-accent/40">
+                        {n}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -311,14 +326,14 @@ export default function InterviewPage() {
                   setReport(null)
                   initInterview()
                 }}
-                className="px-5 py-2.5 bg-accent hover:bg-accent-soft rounded-xl text-sm text-white font-medium flex items-center gap-2 transition-colors"
+                className="px-5 py-2.5 bg-accent hover:bg-accent-soft rounded-xl text-sm text-white font-medium flex items-center gap-2 transition-colors shadow-sm"
               >
                 <RotateCcw className="w-4 h-4" />
                 再来一次
               </button>
               <button
                 onClick={() => navigate('/')}
-                className="px-5 py-2.5 bg-surface-3 hover:bg-surface-2 rounded-xl text-sm text-text-secondary flex items-center gap-2 transition-colors"
+                className="px-5 py-2.5 bg-surface-1 hover:bg-surface-2 rounded-xl text-sm text-text-secondary flex items-center gap-2 transition-colors ring-1 ring-border"
               >
                 <Home className="w-4 h-4" />
                 返回首页

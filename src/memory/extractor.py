@@ -24,6 +24,7 @@ from src.memory.models import (
 from src.memory.database import (
     load_profile, save_profile,
     add_event, load_preferences, save_preference,
+    delete_inferred_preferences_by_keys,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,12 +141,40 @@ async def extract_and_update_memory(
 
     # ── Merge extraction into profile ────────────────────────────
     profile = existing_profile or UserProfile(user_id=user_id)
+    old_direction = profile.target_direction
     profile = _merge_profile(profile, extraction)
+
+    direction_changed = (
+        extraction.target_direction
+        and old_direction
+        and extraction.target_direction != old_direction
+    )
+    if direction_changed:
+        profile.previous_target_direction = old_direction
+        await delete_inferred_preferences_by_keys(
+            user_id, ["industry", "role", "rejection_industry", "rejection_role"]
+        )
+
     profile.analysis_count += 1
     await save_profile(profile)
 
     # ── Create timeline event ────────────────────────────────────
     now = datetime.now(timezone.utc).isoformat()
+    if direction_changed:
+        direction_event = MemoryEvent(
+            event_id=str(uuid.uuid4()),
+            user_id=user_id,
+            event_type=EventType.DIRECTION_CHANGE,
+            timestamp=now,
+            summary=f"转行方向变更：{old_direction} → {extraction.target_direction}",
+            details=json.dumps({
+                "from": old_direction,
+                "to": extraction.target_direction,
+            }, ensure_ascii=False),
+            insights=extraction.insights[:2],
+        )
+        await add_event(direction_event)
+
     event = MemoryEvent(
         event_id=str(uuid.uuid4()),
         user_id=user_id,
@@ -170,6 +199,7 @@ async def extract_and_update_memory(
                 source=PreferenceSource.INFERRED,
                 confidence=0.7,
                 created_at=now,
+                updated_at=now,
             )
             await save_preference(pref)
 
@@ -244,11 +274,16 @@ def _merge_profile(existing: UserProfile, extraction: ProfileExtraction) -> User
     if extraction.confidence_level in ("low", "medium", "high"):
         existing.confidence_level = extraction.confidence_level
 
-    # List fields: union (deduplicate)
-    for field in ("core_strengths", "transferable_skills", "personality_tags", "recurring_gaps"):
+    # List fields: union with cap — recurring_gaps keep most recent items
+    for field in ("core_strengths", "transferable_skills", "personality_tags"):
         old_set = set(getattr(existing, field))
         new_items = getattr(extraction, field)
         merged = list(old_set | set(new_items))
-        setattr(existing, field, merged)
+        setattr(existing, field, merged[:12])
+
+    old_gaps = getattr(existing, "recurring_gaps")
+    new_gaps = extraction.recurring_gaps
+    gap_merged = list(dict.fromkeys(old_gaps + new_gaps))
+    existing.recurring_gaps = gap_merged[-8:]
 
     return existing

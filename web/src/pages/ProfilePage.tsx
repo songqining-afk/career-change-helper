@@ -71,13 +71,13 @@ export default function ProfilePage() {
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gradient">我的进度</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-text-primary">我的进度</h1>
           <p className="text-text-muted text-sm mt-1">转行记忆与历史轨迹</p>
         </div>
 
         {/* Profile card */}
         {profile ? (
-          <div className="rounded-2xl border border-border bg-surface-1 p-6 space-y-5">
+          <div className="card-surface p-6 space-y-5">
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-accent" />
               <h2 className="text-sm font-semibold text-text-secondary">用户画像</h2>
@@ -104,7 +104,7 @@ export default function ProfilePage() {
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-border bg-surface-1 p-10 text-center">
+          <div className="card-surface p-10 text-center">
             <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center mx-auto mb-3">
               <User className="w-5 h-5 text-text-muted" />
             </div>
@@ -115,14 +115,14 @@ export default function ProfilePage() {
 
         {/* Preferences */}
         {preferences.length > 0 && (
-          <div className="rounded-2xl border border-border bg-surface-1 p-6 space-y-4">
+          <div className="card-surface p-6 space-y-4">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-accent" />
               <h2 className="text-sm font-semibold text-text-secondary">偏好记录</h2>
             </div>
             <div className="space-y-2">
               {preferences.map((pref, i) => (
-                <div key={i} className="flex items-center justify-between rounded-xl bg-surface-0 border border-border-subtle p-3.5">
+                <div key={i} className="flex items-center justify-between rounded-xl bg-surface-0 ring-1 ring-black/[0.05] p-3.5">
                   <div className="flex items-center gap-3">
                     <span className="text-xs px-2 py-0.5 bg-accent/10 text-accent rounded font-medium">
                       {pref.key}
@@ -142,7 +142,7 @@ export default function ProfilePage() {
 
         {/* Event timeline */}
         {events.length > 0 && (
-          <div className="rounded-2xl border border-border bg-surface-1 p-6 space-y-4">
+          <div className="card-surface p-6 space-y-4">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-accent" />
               <h2 className="text-sm font-semibold text-text-secondary">历史事件</h2>
@@ -164,7 +164,7 @@ export default function ProfilePage() {
         )}
 
         {events.length === 0 && preferences.length === 0 && !profile && (
-          <div className="rounded-2xl border border-border bg-surface-1 p-14 text-center">
+          <div className="card-surface p-14 text-center">
             <div className="w-14 h-14 rounded-full bg-surface-2 flex items-center justify-center mx-auto mb-4">
               <Calendar className="w-6 h-6 text-text-muted" />
             </div>
@@ -191,11 +191,11 @@ function InfoItem({ label, value, icon }: { label: string; value: string; icon?:
 
 function EventTypeBadge({ type }: { type: string }) {
   const colors: Record<string, string> = {
-    analysis: 'bg-accent/10 text-accent',
-    interview: 'bg-purple-500/10 text-purple-400',
-    direction: 'bg-success/10 text-success',
-    milestone: 'bg-warning/10 text-warning',
-    feedback: 'bg-blue-500/10 text-blue-400',
+    analysis: 'bg-accent/10 text-accent ring-1 ring-accent/12',
+    interview: 'bg-surface-3 text-text-secondary ring-1 ring-border',
+    direction: 'bg-success/10 text-success ring-1 ring-success/12',
+    milestone: 'bg-amber-50 text-warning ring-1 ring-warning/20',
+    feedback: 'bg-surface-2 text-text-secondary ring-1 ring-black/[0.06]',
   }
 
   const labels: Record<string, string> = {
@@ -207,7 +207,7 @@ function EventTypeBadge({ type }: { type: string }) {
   }
 
   return (
-    <span className={`text-xs px-2 py-0.5 rounded font-medium ${colors[type] || 'bg-surface-3 text-text-muted'}`}>
+    <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${colors[type] || 'bg-surface-3 text-text-muted ring-1 ring-border'}`}>
       {labels[type] || type}
     </span>
   )

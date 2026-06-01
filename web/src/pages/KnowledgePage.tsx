@@ -113,12 +113,12 @@ export default function KnowledgePage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gradient">知识库</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-text-primary">知识库</h1>
             <p className="text-text-muted text-sm mt-1">
               上传行业报告、岗位 JD 等文档，AI 会在分析时自动检索
             </p>
           </div>
-          <label className="px-4 py-2.5 bg-accent hover:bg-accent-soft rounded-xl cursor-pointer flex items-center gap-2 text-sm font-medium text-white transition-colors">
+          <label className="px-4 py-2.5 bg-accent hover:bg-accent-soft rounded-xl cursor-pointer flex items-center gap-2 text-sm font-medium text-white transition-colors shadow-sm">
             {uploading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -141,7 +141,7 @@ export default function KnowledgePage() {
         </div>
 
         {/* Search */}
-        <div className="rounded-2xl border border-border bg-surface-1 p-5 space-y-4">
+        <div className="card-surface p-5 space-y-4">
           <div className="flex gap-3">
             <input
               type="text"
@@ -149,12 +149,12 @@ export default function KnowledgePage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="搜索知识库..."
-              className="flex-1 bg-surface-0 border border-border-subtle rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/40 transition-colors"
+              className="flex-1 bg-surface-0 border border-border-subtle rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted/80 focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent/40 transition-shadow"
             />
             <button
               onClick={handleSearch}
               disabled={!searchQuery.trim() || searching}
-              className="px-4 py-2.5 bg-surface-3 hover:bg-surface-2 disabled:opacity-30 rounded-xl flex items-center gap-2 transition-colors"
+              className="px-4 py-2.5 bg-surface-1 hover:bg-surface-2 disabled:opacity-35 rounded-xl flex items-center gap-2 transition-colors ring-1 ring-border"
             >
               {searching ? (
                 <Loader2 className="w-4 h-4 animate-spin text-text-muted" />
@@ -168,7 +168,7 @@ export default function KnowledgePage() {
             <div className="space-y-2 pt-2 border-t border-border-subtle">
               <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">搜索结果</h3>
               {searchResults.map((r, i) => (
-                <div key={i} className="rounded-xl bg-surface-0 border border-border-subtle p-3.5">
+                <div key={i} className="rounded-xl bg-surface-0 ring-1 ring-black/[0.05] p-3.5">
                   <p className="text-xs text-text-secondary leading-relaxed">{r.text}</p>
                   <span className="text-xs text-text-muted mt-2 inline-block">
                     相关度 {(r.score * 100).toFixed(0)}%
@@ -180,7 +180,7 @@ export default function KnowledgePage() {
         </div>
 
         {/* Documents list */}
-        <div className="rounded-2xl border border-border bg-surface-1 p-5">
+        <div className="card-surface p-5">
           <h2 className="text-sm font-semibold text-text-secondary mb-4">已上传文档</h2>
 
           {loading ? (
@@ -201,10 +201,10 @@ export default function KnowledgePage() {
               {documents.map((doc) => (
                 <div
                   key={doc.filename}
-                  className="flex items-center justify-between rounded-xl bg-surface-0 border border-border-subtle p-4 hover:border-border transition-colors"
+                  className="flex items-center justify-between rounded-xl bg-surface-0 ring-1 ring-black/[0.05] p-4 hover:ring-border transition-shadow"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-lg bg-surface-1 flex items-center justify-center ring-1 ring-black/[0.06]">
                       <FileText className="w-4 h-4 text-accent" />
                     </div>
                     <div>

@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Loader2, Send, Check, ArrowRight, MessageSquare, Download } from 'lucide-react'
-import { startInteractive, runStep, getActiveSession } from '../lib/api'
+import { Loader2, Send, Check, ArrowRight, MessageSquare, FileDown } from 'lucide-react'
+import { startInteractive, runStep, getActiveSession, finalizeSession } from '../lib/api'
 import type { UserInput, InteractiveStepResponse, SavedSession } from '../lib/api'
 import StepResult from '../components/StepResult'
+import { downloadAnalysisReportPdf } from '../lib/analysisReportPdf'
 
 const AGENTS = [
-  { step: 1, name: '画像师', icon: '🔍', desc: '能力画像' },
-  { step: 2, name: '探路者', icon: '🧭', desc: '市场匹配' },
-  { step: 3, name: '规划局', icon: '🗺️', desc: '路径规划' },
-  { step: 4, name: '磨刀石', icon: '✨', desc: '简历润色' },
+  { step: 1, name: '画像师', desc: '能力画像' },
+  { step: 2, name: '探路者', desc: '市场匹配' },
+  { step: 3, name: '规划局', desc: '路径规划' },
+  { step: 4, name: '磨刀石', desc: '简历润色' },
+  { step: 5, name: '面试官', desc: '模拟面试' },
 ]
 
 type Phase = 'init' | 'running' | 'feedback' | 'done' | 'error'
@@ -28,7 +30,13 @@ export default function AnalyzePage() {
   const [feedback, setFeedback] = useState('')
   const [error, setError] = useState('')
   const [chosenDirection, setChosenDirection] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [pdfExporting, setPdfExporting] = useState(false)
+  /** Filled when resuming from DB (HomePage only passes recovery: true). */
+  const [recoveredUserInput, setRecoveredUserInput] = useState<UserInput | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  const effectiveUserInput = userInput ?? recoveredUserInput ?? undefined
 
   useEffect(() => {
     checkForRecovery()
@@ -59,8 +67,9 @@ export default function AnalyzePage() {
     initSession()
   }
 
-  function restoreSession(session: SavedSession) {
+  function restoreSession(session: SavedSession): number {
     setSessionId(session.session_id)
+    setRecoveredUserInput(session.user_input)
     const savedResults: Record<number, InteractiveStepResponse> = {}
     let maxStep = 0
     for (const [stepStr, data] of Object.entries(session.results)) {
@@ -76,14 +85,18 @@ export default function AnalyzePage() {
       if (step > maxStep) maxStep = step
     }
     setResults(savedResults)
-    setCurrentStep(maxStep)
-    setPhase(maxStep >= 4 ? 'done' : 'feedback')
+    setCurrentStep(maxStep === 0 ? 1 : maxStep >= 4 ? 4 : maxStep)
+    // Stay on feedback until finalize succeeds (caller may auto-finalize when 4 steps exist)
+    setPhase('feedback')
+    return maxStep
   }
 
   async function initSession() {
+    const input = userInput
+    if (!input) return
     try {
       setPhase('running')
-      const { session_id } = await startInteractive(userInput!)
+      const { session_id } = await startInteractive(input)
       setSessionId(session_id)
       await executeStep(session_id, 1, '')
     } catch (e: unknown) {
@@ -114,11 +127,10 @@ export default function AnalyzePage() {
     }
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (currentStep === 2 && !chosenDirection) return
 
     if (currentStep >= 4) {
-      setPhase('done')
       return
     }
 
@@ -137,7 +149,36 @@ export default function AnalyzePage() {
   }
 
   function handleGoInterview() {
-    navigate('/interview', { state: { userInput, pipelineResult: buildPipelineResult() } })
+    if (!effectiveUserInput) return
+    navigate('/interview', {
+      state: { userInput: effectiveUserInput, pipelineResult: buildPipelineResult() },
+    })
+  }
+
+  async function handleSaveAnalysis() {
+    if (!sessionId) return
+    setSaving(true)
+    setError('')
+    try {
+      await finalizeSession(sessionId)
+      setPhase('done')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '保存分析结果失败，请重试')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDownloadPdf() {
+    setPdfExporting(true)
+    setError('')
+    try {
+      await downloadAnalysisReportPdf(buildPipelineResult())
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '生成 PDF 失败，请重试')
+    } finally {
+      setPdfExporting(false)
+    }
   }
 
   function buildPipelineResult() {
@@ -152,28 +193,36 @@ export default function AnalyzePage() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Progress stepper */}
-      <div className="sticky top-14 z-10 bg-surface-0/80 backdrop-blur-xl border-b border-border-subtle px-6 py-3">
+      <div className="sticky top-14 z-10 border-b border-border-subtle bg-surface-0/80 backdrop-blur-xl backdrop-saturate-150 px-6 py-3">
         <div className="max-w-4xl mx-auto flex items-center gap-1">
           {AGENTS.map((agent) => (
             <div key={agent.step} className="flex items-center gap-1 flex-1">
               <div
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${
-                  agent.step < currentStep
-                    ? 'bg-success/10 text-success'
-                    : agent.step === currentStep
-                    ? 'bg-accent/10 text-accent border border-accent/30'
-                    : 'bg-surface-2 text-text-muted'
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors duration-200 ${
+                  agent.step === 5
+                    ? results[4]?.success && (phase === 'feedback' || phase === 'done')
+                      ? 'bg-accent/8 text-accent ring-1 ring-accent/20'
+                      : 'bg-surface-2 text-text-muted ring-1 ring-black/[0.04]'
+                    : agent.step < currentStep
+                    ? 'bg-success/10 text-success ring-1 ring-success/15'
+                    : agent.step === currentStep && !(agent.step === 4 && results[4]?.success)
+                    ? 'bg-accent/8 text-accent ring-1 ring-accent/20'
+                    : results[agent.step]?.success && agent.step === 4
+                    ? 'bg-success/10 text-success ring-1 ring-success/15'
+                    : 'bg-surface-2 text-text-muted ring-1 ring-black/[0.04]'
                 }`}
               >
-                {agent.step < currentStep ? (
-                  <Check className="w-3.5 h-3.5" />
+                {agent.step < currentStep || (agent.step === 4 && results[4]?.success) ? (
+                  <Check className="w-3.5 h-3.5" strokeWidth={2} />
                 ) : (
-                  <span>{agent.icon}</span>
+                  <span className="text-[10px] font-semibold tabular-nums w-5 h-5 rounded-full bg-accent/12 text-accent flex items-center justify-center shrink-0">
+                    {agent.step}
+                  </span>
                 )}
                 <span className="hidden sm:inline">{agent.name}</span>
               </div>
-              {agent.step < 4 && (
-                <ArrowRight className="w-3 h-3 text-text-muted hidden sm:block" />
+              {agent.step < 5 && (
+                <ArrowRight className="w-3 h-3 text-text-muted hidden sm:block shrink-0" />
               )}
             </div>
           ))}
@@ -187,7 +236,9 @@ export default function AnalyzePage() {
         {Object.entries(results).map(([step, res]) => (
           <div key={step} className="space-y-3 animate-in fade-in">
             <div className="flex items-center gap-2 text-text-secondary">
-              <span className="text-base">{AGENTS[Number(step) - 1].icon}</span>
+              <span className="text-[11px] font-semibold tabular-nums w-6 h-6 rounded-full bg-accent/10 text-accent flex items-center justify-center shrink-0">
+                {Number(step)}
+              </span>
               <span className="text-sm font-medium">{AGENTS[Number(step) - 1].name}</span>
               <span className="text-xs text-text-muted ml-auto">
                 {res.duration_s.toFixed(1)}s
@@ -207,7 +258,7 @@ export default function AnalyzePage() {
             </div>
             <div>
               <p className="text-sm font-medium text-text-primary">
-                {AGENTS[currentStep - 1].icon} 「{AGENTS[currentStep - 1].name}」正在分析
+                「{AGENTS[currentStep - 1].name}」正在分析
               </p>
               <p className="text-xs text-text-muted mt-0.5">通常需要 15-30 秒</p>
             </div>
@@ -216,7 +267,7 @@ export default function AnalyzePage() {
 
         {/* Error state */}
         {phase === 'error' && (
-          <div className="rounded-xl border border-danger/30 bg-danger/5 p-5 space-y-3">
+          <div className="rounded-xl ring-1 ring-danger/20 bg-red-50/80 p-5 space-y-3">
             <p className="text-sm font-medium text-danger">分析出错</p>
             <p className="text-xs text-text-secondary">{error}</p>
             <button
@@ -230,7 +281,7 @@ export default function AnalyzePage() {
 
         {/* Feedback area */}
         {phase === 'feedback' && (
-          <div className="rounded-2xl border border-border bg-surface-1 p-6 space-y-4">
+          <div className="rounded-2xl ring-1 ring-border bg-surface-1 p-6 space-y-4 shadow-sm">
             {/* Direction chooser for step 2 */}
             {currentStep === 2 && results[2]?.result && (
               <DirectionChooser
@@ -252,57 +303,120 @@ export default function AnalyzePage() {
                   }
                 }}
                 placeholder="输入修改意见，或直接确认进入下一步..."
-                className="flex-1 bg-surface-0 border border-border-subtle rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/40 transition-colors"
+                className="flex-1 bg-surface-0 border border-border-subtle rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted/80 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent/35 transition-shadow"
               />
               <button
                 onClick={handleRevise}
                 disabled={!feedback.trim()}
-                className="p-2.5 bg-surface-3 hover:bg-surface-2 disabled:opacity-30 rounded-xl transition-colors"
+                className="p-2.5 bg-surface-1 hover:bg-surface-2 disabled:opacity-30 rounded-xl transition-colors ring-1 ring-border"
                 title="提交修改意见"
               >
                 <Send className="w-4 h-4 text-text-secondary" />
               </button>
             </div>
 
-            <button
-              onClick={handleConfirm}
-              disabled={currentStep === 2 && !chosenDirection}
-              className="w-full bg-accent hover:bg-accent-soft disabled:opacity-30 text-white font-medium py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2"
-            >
-              <Check className="w-4 h-4" />
-              {currentStep >= 4 ? '完成分析' : '满意，下一步'}
-            </button>
+            {currentStep === 4 && results[4]?.success ? (
+              <div className="space-y-3 pt-1">
+                {error ? <p className="text-xs text-danger">{error}</p> : null}
+                <p className="text-xs text-text-muted leading-relaxed">
+                  第 5 步「面试官」为模拟面试，可直接开始。可下载 PDF 报告留档；「保存分析结果」写入记忆与历史（可选）。
+                </p>
+                <button
+                  type="button"
+                  onClick={handleGoInterview}
+                  disabled={!effectiveUserInput}
+                  className="w-full bg-accent hover:bg-accent-soft disabled:opacity-35 text-white font-medium py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  进入模拟面试
+                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveAnalysis()}
+                    disabled={saving || pdfExporting}
+                    className="w-full bg-surface-1 hover:bg-surface-2 disabled:opacity-50 text-text-primary font-medium py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2 ring-1 ring-border"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                        正在保存…
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 text-accent" />
+                        保存分析结果
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadPdf()}
+                    disabled={pdfExporting || saving}
+                    className="w-full bg-surface-1 hover:bg-surface-2 disabled:opacity-50 text-text-primary font-medium py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2 ring-1 ring-border"
+                  >
+                    {pdfExporting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                        正在生成 PDF…
+                      </>
+                    ) : (
+                      <>
+                        <FileDown className="w-4 h-4 text-accent" />
+                        下载 PDF 报告
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleConfirm()}
+                disabled={currentStep === 2 && !chosenDirection}
+                className="w-full bg-accent hover:bg-accent-soft disabled:opacity-35 text-white font-medium py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Check className="w-4 h-4" />
+                满意，下一步
+              </button>
+            )}
           </div>
         )}
 
         {/* Done state */}
         {phase === 'done' && (
-          <div className="rounded-2xl border border-success/30 bg-success/5 p-8 text-center space-y-5 glow-success">
-            <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center mx-auto">
-              <Check className="w-7 h-7 text-success" />
+          <div className="rounded-2xl ring-1 ring-success/25 bg-emerald-50/70 p-8 text-center space-y-5 glow-success">
+            <div className="w-14 h-14 rounded-full bg-white ring-1 ring-success/20 flex items-center justify-center mx-auto shadow-sm">
+              <Check className="w-7 h-7 text-success" strokeWidth={1.75} />
             </div>
             <div>
-              <p className="text-lg font-semibold text-success">全部分析完成</p>
-              <p className="text-sm text-text-muted mt-1">4 位顾问已完成评估</p>
+              <p className="text-lg font-semibold text-success tracking-tight">全部分析完成</p>
+              <p className="text-sm text-text-muted mt-1">前四步已完成；第 5 步「面试官」可随时进入。</p>
             </div>
-            <div className="flex gap-3 justify-center">
+            <div className="flex flex-wrap gap-3 justify-center">
               <button
                 onClick={handleGoInterview}
-                className="px-5 py-2.5 bg-accent hover:bg-accent-soft rounded-xl font-medium text-sm text-white flex items-center gap-2 transition-colors"
+                className="px-5 py-2.5 bg-accent hover:bg-accent-soft rounded-xl font-medium text-sm text-white flex items-center gap-2 transition-colors shadow-sm"
               >
                 <MessageSquare className="w-4 h-4" />
                 进入模拟面试
               </button>
               <button
-                onClick={() => window.print()}
-                className="px-5 py-2.5 bg-surface-3 hover:bg-surface-2 rounded-xl text-sm text-text-secondary flex items-center gap-2 transition-colors print:hidden"
+                type="button"
+                onClick={() => void handleDownloadPdf()}
+                disabled={pdfExporting}
+                className="px-5 py-2.5 bg-surface-1 hover:bg-surface-2 rounded-xl text-sm text-text-secondary flex items-center gap-2 transition-colors ring-1 ring-border print-hidden disabled:opacity-50"
               >
-                <Download className="w-4 h-4" />
-                导出报告
+                {pdfExporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                ) : (
+                  <FileDown className="w-4 h-4" />
+                )}
+                下载 PDF
               </button>
               <button
                 onClick={() => navigate('/')}
-                className="px-5 py-2.5 bg-surface-3 hover:bg-surface-2 rounded-xl text-sm text-text-secondary transition-colors"
+                className="px-5 py-2.5 bg-surface-1 hover:bg-surface-2 rounded-xl text-sm text-text-secondary transition-colors ring-1 ring-border"
               >
                 返回首页
               </button>
@@ -340,10 +454,10 @@ function DirectionChooser({
             <button
               key={i}
               onClick={() => onChoose(label)}
-              className={`text-left p-3.5 rounded-xl border transition-all duration-200 ${
+              className={`text-left p-3.5 rounded-xl transition-colors duration-200 ring-1 ${
                 isChosen
-                  ? 'border-accent/50 bg-accent/5'
-                  : 'border-border-subtle bg-surface-0 hover:border-border'
+                  ? 'ring-accent/40 bg-accent/[0.06] shadow-sm'
+                  : 'ring-black/[0.06] bg-surface-1 hover:ring-border hover:bg-surface-0'
               }`}
             >
               <div className="flex items-center justify-between">

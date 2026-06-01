@@ -6,7 +6,7 @@ SEQUENTIAL INTERACTIVE MODE (default):
 
 Each agent receives:
   - Its own inputs (structured data from previous agents)
-  - Full memory_context (profile + events + preferences)
+  - Per-agent memory slice (profile / snapshot / preferences / events — not full dump)
   - Accumulated user_feedback from all prior interactions (memory inheritance)
 
 Interview (Agent 5) is the final step — runs as a separate multi-turn session.
@@ -28,11 +28,14 @@ from src.schemas.models import (
     TransitionPlan, PolishedResume, PipelineResult,
 )
 from src.memory.database import (
-    load_memory, save_memory, save_analysis, init_db,
-    load_profile, load_preferences, list_events,
+    save_analysis, init_db,
+    save_snapshot,
+    load_session,
 )
-from src.memory.models import UserMemory, AnalysisRecord, UserProfile
+from src.memory.models import AnalysisRecord
 from src.memory.extractor import extract_and_update_memory
+from src.memory.context import build_agent_memory
+from src.memory.snapshot import build_analysis_snapshot
 from src.knowledge import KnowledgeStore
 
 logger = logging.getLogger(__name__)
@@ -65,97 +68,24 @@ class PipelineRun:
 
 # ── Memory context builder ───────────────────────────────────────
 
-def _build_memory_context(
-    profile: UserProfile | None,
-    preferences: list,
-    events: list,
+AGENT_MEMORY_KEYS = {
+    1: "profile_analyzer",
+    2: "market_matcher",
+    3: "strategy_architect",
+    4: "cv_optimizer",
+}
+
+
+async def _build_step_memory(
+    user_id: str,
+    step: int,
+    feedback_history: list[dict],
 ) -> str:
-    """Build a rich memory context string from the 3-layer memory system."""
-    parts = []
-
-    # Layer 1: 用户档案
-    if profile:
-        profile_lines = []
-        if profile.name:
-            profile_lines.append(f"姓名: {profile.name}")
-        if profile.age:
-            profile_lines.append(f"年龄: {profile.age}")
-        if profile.city:
-            profile_lines.append(f"城市: {profile.city}")
-        if profile.education:
-            profile_lines.append(f"学历: {profile.education}")
-        if profile.current_role:
-            profile_lines.append(f"当前职位: {profile.current_role}")
-        if profile.current_industry:
-            profile_lines.append(f"当前行业: {profile.current_industry}")
-        if profile.years_of_experience:
-            profile_lines.append(f"工作年限: {profile.years_of_experience}年")
-        if profile.current_salary_range:
-            profile_lines.append(f"薪资范围: {profile.current_salary_range}")
-        if profile.family_situation:
-            profile_lines.append(f"家庭状况: {profile.family_situation}")
-        if profile.core_strengths:
-            profile_lines.append(f"核心优势: {', '.join(profile.core_strengths)}")
-        if profile.transferable_skills:
-            profile_lines.append(f"可迁移能力: {', '.join(profile.transferable_skills)}")
-        if profile.personality_tags:
-            profile_lines.append(f"性格标签: {', '.join(profile.personality_tags)}")
-        if profile.recurring_gaps:
-            profile_lines.append(f"反复短板: {', '.join(profile.recurring_gaps)}")
-        if profile.target_direction:
-            profile_lines.append(f"当前目标方向: {profile.target_direction}")
-        if profile.transition_stage != "exploring":
-            profile_lines.append(f"转行阶段: {profile.transition_stage}")
-        if profile.analysis_count:
-            profile_lines.append(f"已分析 {profile.analysis_count} 次")
-        if profile.interview_count:
-            profile_lines.append(
-                f"已面试 {profile.interview_count} 次，"
-                f"平均准备度 {profile.avg_readiness_score:.0f}/100"
-            )
-        if profile_lines:
-            parts.append("【用户档案】\n" + "\n".join(profile_lines))
-
-    # Layer 2: 最近事件（最多5条）
-    if events:
-        event_lines = []
-        for e in events[:5]:
-            line = f"- [{e.timestamp[:10]}] {e.summary}"
-            if e.insights:
-                line += f" → 洞察: {'; '.join(e.insights[:2])}"
-            event_lines.append(line)
-        parts.append("【转行时间线】\n" + "\n".join(event_lines))
-
-    # Layer 3: 偏好
-    if preferences:
-        pref_lines = []
-        for p in preferences:
-            source_tag = "明确" if p.source == "explicit" else "推断"
-            pref_lines.append(f"- [{source_tag}] {p.key}: {p.value}")
-        parts.append("【用户偏好】\n" + "\n".join(pref_lines))
-
-    return "\n\n".join(parts) if parts else ""
-
-
-def _build_legacy_history_context(memory: UserMemory) -> str:
-    """Fallback: build context from legacy UserMemory (backward compat)."""
-    parts = []
-    if memory.last_profile_summary:
-        parts.append(f"上次分析的核心竞争力: {memory.last_profile_summary}")
-    if memory.last_matched_industries:
-        parts.append(f"上次匹配的行业方向: {', '.join(memory.last_matched_industries)}")
-    if memory.last_plan_target:
-        parts.append(f"上次选定的转行目标: {memory.last_plan_target}")
-    if memory.interview_count > 0:
-        parts.append(
-            f"已完成 {memory.interview_count} 次模拟面试，"
-            f"平均准备度 {memory.avg_readiness_score:.0f}/100"
-        )
-    if memory.recurring_gaps:
-        parts.append(f"反复出现的短板: {', '.join(memory.recurring_gaps)}")
-    if memory.preferred_directions:
-        parts.append(f"用户偏好方向: {', '.join(memory.preferred_directions)}")
-    return "\n".join(parts) if parts else ""
+    """Build per-agent memory + in-run feedback for one pipeline step."""
+    agent_key = AGENT_MEMORY_KEYS.get(step, "")
+    base = await build_agent_memory(agent_key, user_id) if agent_key else ""
+    feedback_ctx = _build_feedback_context(feedback_history)
+    return "\n\n".join(filter(None, [base, feedback_ctx]))
 
 
 def _build_feedback_context(feedback_history: list[dict]) -> str:
@@ -173,34 +103,19 @@ def _build_feedback_context(feedback_history: list[dict]) -> str:
 
 # ── Step-by-step pipeline functions ──────────────────────────────
 
-async def load_pipeline_context(user_input: UserInput) -> tuple[str, str, KnowledgeStore]:
-    """Load memory context and initialize knowledge store. Returns (memory_context, legacy_context, kb)."""
+async def load_pipeline_context(user_input: UserInput) -> KnowledgeStore:
+    """Initialize DB and knowledge store. Memory is loaded per-agent at each step."""
     await init_db()
-    user_profile = await load_profile(user_input.user_id)
-    user_prefs = await load_preferences(user_input.user_id)
-    recent_events = await list_events(user_input.user_id, limit=5)
-    memory_context = _build_memory_context(user_profile, user_prefs, recent_events)
-
-    legacy_context = ""
-    if not memory_context:
-        legacy_memory = await load_memory(user_input.user_id)
-        if legacy_memory:
-            legacy_context = _build_legacy_history_context(legacy_memory)
-            memory_context = legacy_context
-
-    kb = KnowledgeStore()
-    return memory_context, legacy_context, kb
+    return KnowledgeStore()
 
 
 async def run_step1(
     user_input: UserInput,
-    memory_context: str,
     feedback_history: list[dict],
     kb: KnowledgeStore,
 ) -> TalentProfile:
     """Agent 1: 能力画像专家"""
-    feedback_ctx = _build_feedback_context(feedback_history)
-    combined_memory = "\n\n".join(filter(None, [memory_context, feedback_ctx]))
+    combined_memory = await _build_step_memory(user_input.user_id, 1, feedback_history)
 
     resume_rag = kb.get_rag_context(
         user_input.user_id,
@@ -219,14 +134,12 @@ async def run_step1(
 async def run_step2(
     user_input: UserInput,
     profile: TalentProfile,
-    memory_context: str,
     feedback_history: list[dict],
     kb: KnowledgeStore,
     rag_context: str = "",
 ) -> IndustryMatch:
     """Agent 2: 市场匹配引擎"""
-    feedback_ctx = _build_feedback_context(feedback_history)
-    combined_memory = "\n\n".join(filter(None, [memory_context, feedback_ctx]))
+    combined_memory = await _build_step_memory(user_input.user_id, 2, feedback_history)
 
     market_query = f"{profile.summary} {' '.join(profile.industries_touched)}"
     industry_rag = rag_context or kb.get_rag_context(
@@ -249,13 +162,11 @@ async def run_step3(
     user_input: UserInput,
     profile: TalentProfile,
     industry: IndustryMatch,
-    memory_context: str,
     feedback_history: list[dict],
     kb: KnowledgeStore,
 ) -> TransitionPlan:
     """Agent 3: 路径规划架构师"""
-    feedback_ctx = _build_feedback_context(feedback_history)
-    combined_memory = "\n\n".join(filter(None, [memory_context, feedback_ctx]))
+    combined_memory = await _build_step_memory(user_input.user_id, 3, feedback_history)
 
     # Use user's chosen target if available, otherwise fallback to top match
     target = industry.chosen_target or (industry.top_matches[0] if industry.top_matches else None)
@@ -282,13 +193,11 @@ async def run_step4(
     user_input: UserInput,
     profile: TalentProfile,
     plan: TransitionPlan,
-    memory_context: str,
     feedback_history: list[dict],
     kb: KnowledgeStore,
 ) -> PolishedResume:
     """Agent 4: 简历润色助手"""
-    feedback_ctx = _build_feedback_context(feedback_history)
-    combined_memory = "\n\n".join(filter(None, [memory_context, feedback_ctx]))
+    combined_memory = await _build_step_memory(user_input.user_id, 4, feedback_history)
 
     cv_query = f"{plan.chosen_target.industry} {plan.chosen_target.role} 简历"
     template_rag = kb.get_rag_context(
@@ -314,25 +223,8 @@ async def save_pipeline_results(
     industry = run.result.industry_match
     plan = run.result.transition_plan
 
-    # ── Update legacy memory (backward compat) ────────────────────
-    try:
-        legacy = await load_memory(user_input.user_id) or UserMemory(user_id=user_input.user_id)
-        legacy.resume_text = user_input.resume_text
-        legacy.background = user_input.background
-        legacy.constraints = user_input.constraints
-        legacy.last_profile_summary = profile.summary
-        legacy.last_matched_industries = [m.industry for m in industry.top_matches]
-        legacy.last_plan_target = f"{plan.chosen_target.industry} - {plan.chosen_target.role}"
-        if user_input.target_direction:
-            dirs = legacy.preferred_directions
-            if user_input.target_direction not in dirs:
-                dirs.append(user_input.target_direction)
-            legacy.preferred_directions = dirs[-5:]
-        await save_memory(legacy)
-    except Exception as e:
-        logger.warning(f"Failed to update legacy memory: {e}")
-
     # ── Save analysis record ──────────────────────────────────────
+    record_id = ""
     try:
         record = AnalysisRecord(
             record_id=str(uuid.uuid4()),
@@ -341,11 +233,12 @@ async def save_pipeline_results(
             user_input_json=user_input.model_dump_json(),
             pipeline_result_json=run.result.model_dump_json(),
         )
+        record_id = record.record_id
         await save_analysis(record)
     except Exception as e:
         logger.warning(f"Failed to save analysis record: {e}")
 
-    # ── 3-layer memory extraction ─────────────────────────────────
+    # ── 3-layer memory extraction (before snapshot links analysis_id) ─
     try:
         await extract_and_update_memory(
             user_id=user_input.user_id,
@@ -355,6 +248,19 @@ async def save_pipeline_results(
         logger.info(f"3-layer memory updated for user {user_input.user_id}")
     except Exception as e:
         logger.warning(f"Memory extraction failed (non-fatal): {e}")
+
+    # ── Compressed snapshot + profile link ────────────────────────
+    if record_id:
+        try:
+            snapshot = build_analysis_snapshot(
+                user_input.user_id,
+                record_id,
+                user_input,
+                run.result,
+            )
+            await save_snapshot(snapshot)
+        except Exception as e:
+            logger.warning(f"Failed to save analysis snapshot: {e}")
 
 
 # ── Full pipeline (non-interactive, for API use) ─────────────────
@@ -368,12 +274,12 @@ async def run_pipeline(user_input: UserInput, rag_context: str = "") -> Pipeline
     t_start = time.monotonic()
     feedback_history: list[dict] = []
 
-    memory_context, _, kb = await load_pipeline_context(user_input)
+    kb = await load_pipeline_context(user_input)
 
     # Agent 1
     t0 = time.monotonic()
     try:
-        profile = await run_step1(user_input, memory_context, feedback_history, kb)
+        profile = await run_step1(user_input, feedback_history, kb)
         run.profile = profile
         run.steps.append(StepResult("能力画像专家", time.monotonic() - t0, True))
     except Exception as e:
@@ -385,7 +291,7 @@ async def run_pipeline(user_input: UserInput, rag_context: str = "") -> Pipeline
     # Agent 2
     t0 = time.monotonic()
     try:
-        industry = await run_step2(user_input, profile, memory_context, feedback_history, kb, rag_context)
+        industry = await run_step2(user_input, profile, feedback_history, kb, rag_context)
         run.industry_match = industry
         run.steps.append(StepResult("市场匹配引擎", time.monotonic() - t0, True))
     except Exception as e:
@@ -397,7 +303,7 @@ async def run_pipeline(user_input: UserInput, rag_context: str = "") -> Pipeline
     # Agent 3
     t0 = time.monotonic()
     try:
-        plan = await run_step3(user_input, profile, industry, memory_context, feedback_history, kb)
+        plan = await run_step3(user_input, profile, industry, feedback_history, kb)
         run.transition_plan = plan
         run.steps.append(StepResult("路径规划架构师", time.monotonic() - t0, True))
     except Exception as e:
@@ -409,7 +315,7 @@ async def run_pipeline(user_input: UserInput, rag_context: str = "") -> Pipeline
     # Agent 4
     t0 = time.monotonic()
     try:
-        resume = await run_step4(user_input, profile, plan, memory_context, feedback_history, kb)
+        resume = await run_step4(user_input, profile, plan, feedback_history, kb)
         run.polished_resume = resume
         run.steps.append(StepResult("简历润色助手", time.monotonic() - t0, True))
     except Exception as e:
@@ -437,7 +343,6 @@ async def run_pipeline(user_input: UserInput, rag_context: str = "") -> Pipeline
 class InteractivePipelineState:
     """Tracks state for interactive pipeline execution."""
     user_input: UserInput
-    memory_context: str
     kb: KnowledgeStore
     feedback_history: list[dict] = field(default_factory=list)
     
@@ -454,12 +359,79 @@ class InteractivePipelineState:
 
 async def init_interactive_pipeline(user_input: UserInput) -> InteractivePipelineState:
     """Initialize interactive pipeline state."""
-    memory_context, _, kb = await load_pipeline_context(user_input)
+    kb = await load_pipeline_context(user_input)
     return InteractivePipelineState(
         user_input=user_input,
-        memory_context=memory_context,
         kb=kb,
     )
+
+
+async def restore_interactive_state_from_db(session_id: str) -> InteractivePipelineState | None:
+    """Rebuild in-memory interactive state from SQLite (server restart / multi-worker recovery).
+
+    Only restores sessions with status ``active``. Parsed agent outputs and ``steps`` are
+    reconstructed from ``results_json``; ``feedback_history`` cannot be restored (demo OK).
+    """
+    row = await load_session(session_id)
+    if not row:
+        return None
+
+    try:
+        user_input = UserInput.model_validate(row["user_input"])
+    except Exception:
+        logger.exception("restore_interactive_state_from_db: invalid user_input for %s", session_id)
+        return None
+
+    results = row.get("results") or {}
+    profile: TalentProfile | None = None
+    industry_match: IndustryMatch | None = None
+    transition_plan: TransitionPlan | None = None
+    polished_resume: PolishedResume | None = None
+    rebuilt_steps: list[StepResult] = []
+
+    for step in (1, 2, 3, 4):
+        key = str(step)
+        if key not in results:
+            break
+        entry = results[key]
+        if not isinstance(entry, dict):
+            logger.warning("restore_interactive_state_from_db: bad entry type step %s", key)
+            return None
+        agent_name = entry.get("agent_name", "")
+        duration_s = float(entry.get("duration_s") or 0.0)
+        raw = entry.get("result")
+        if raw is None:
+            logger.warning("restore_interactive_state_from_db: missing result step %s", key)
+            return None
+        try:
+            if step == 1:
+                profile = TalentProfile.model_validate(raw)
+            elif step == 2:
+                industry_match = IndustryMatch.model_validate(raw)
+            elif step == 3:
+                transition_plan = TransitionPlan.model_validate(raw)
+            elif step == 4:
+                polished_resume = PolishedResume.model_validate(raw)
+        except Exception:
+            logger.exception(
+                "restore_interactive_state_from_db: invalid result for step %s session %s",
+                key,
+                session_id,
+            )
+            return None
+        rebuilt_steps.append(StepResult(agent_name, duration_s, True))
+
+    kb = await load_pipeline_context(user_input)
+    state = InteractivePipelineState(
+        user_input=user_input,
+        kb=kb,
+    )
+    state.profile = profile
+    state.industry_match = industry_match
+    state.transition_plan = transition_plan
+    state.polished_resume = polished_resume
+    state.steps = rebuilt_steps
+    return state
 
 
 async def run_interactive_step(
@@ -491,7 +463,6 @@ async def run_interactive_step(
         if step == 1:
             result = await run_step1(
                 state.user_input,
-                state.memory_context,
                 state.feedback_history,
                 state.kb,
             )
@@ -505,7 +476,6 @@ async def run_interactive_step(
             result = await run_step2(
                 state.user_input,
                 state.profile,
-                state.memory_context,
                 state.feedback_history,
                 state.kb,
             )
@@ -520,7 +490,6 @@ async def run_interactive_step(
                 state.user_input,
                 state.profile,
                 state.industry_match,
-                state.memory_context,
                 state.feedback_history,
                 state.kb,
             )
@@ -535,7 +504,6 @@ async def run_interactive_step(
                 state.user_input,
                 state.profile,
                 state.transition_plan,
-                state.memory_context,
                 state.feedback_history,
                 state.kb,
             )

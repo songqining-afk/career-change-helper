@@ -4,11 +4,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>转行帮 · AI 转行助手</title>
+    <title>转 行 帮 · AI 转行助手</title>
     <meta name="description" content="AI助力转行，开启职业新篇章。" />
   </head>
   <body>
     <div id="root"></div>
+    <!-- 直接双击打开本文件时是 file://，Vite 不会参与，/src/main.tsx 无法加载 → 白屏。 -->
+    <script>
+      (function () {
+        if (location.protocol !== "file:") return;
+        var el = document.getElementById("root");
+        if (!el) return;
+        el.innerHTML =
+          '<div style="font-family:system-ui,sans-serif;max-width:28rem;margin:3rem auto;padding:1.5rem;line-height:1.6;color:#333">' +
+          "<p><strong>不要直接打开这个 HTML 文件。</strong></p>" +
+          "<p>这是 Vite + React 项目，需要先启动开发服务器，在浏览器里访问 <code>http://localhost:3000</code>。</p>" +
+          "<p>在项目里的 <code>web</code> 文件夹打开终端，执行：</p>" +
+          "<pre style=\"background:#f4f4f5;padding:0.75rem;border-radius:8px;overflow:auto\">npm run dev</pre>" +
+          "<p>若已用后端一键托管前端（构建产物），请访问后端提供的地址（例如 <code>http://127.0.0.1:8000</code>）。</p>" +
+          "</div>";
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

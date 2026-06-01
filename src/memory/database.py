@@ -21,6 +21,7 @@ import aiosqlite
 from src.memory.models import (
     UserMemory, AnalysisRecord,
     UserProfile, MemoryEvent, UserPreference, PreferenceSource,
+    AnalysisSnapshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,30 @@ async def init_db() -> None:
             ON user_preferences(user_id)
         """)
 
+        # Analysis snapshots — compressed cross-session memory
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS analysis_snapshots (
+                snapshot_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                analysis_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                target_direction TEXT DEFAULT '',
+                top_industries TEXT DEFAULT '[]',
+                top_roles TEXT DEFAULT '[]',
+                strength_summary TEXT DEFAULT '',
+                gap_summary TEXT DEFAULT '',
+                plan_milestone TEXT DEFAULT '',
+                user_constraints TEXT DEFAULT '',
+                narrative TEXT DEFAULT ''
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_snapshots_user
+            ON analysis_snapshots(user_id, created_at DESC)
+        """)
+
+        await _migrate_schema(db)
+
         # Interactive sessions (progress save)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS interactive_sessions (
@@ -151,6 +176,26 @@ async def init_db() -> None:
 
         await db.commit()
     logger.info("Memory database initialized at %s", DB_PATH)
+
+
+async def _column_exists(db: aiosqlite.Connection, table: str, column: str) -> bool:
+    cursor = await db.execute(f"PRAGMA table_info({table})")
+    rows = await cursor.fetchall()
+    return any(row[1] == column for row in rows)
+
+
+async def _migrate_schema(db: aiosqlite.Connection) -> None:
+    """Add columns introduced after initial schema without breaking existing DBs."""
+    migrations: list[tuple[str, str, str]] = [
+        ("user_profiles", "previous_target_direction", "TEXT DEFAULT ''"),
+        ("user_profiles", "last_analysis_id", "TEXT DEFAULT ''"),
+        ("user_profiles", "last_snapshot_at", "TEXT DEFAULT ''"),
+        ("user_preferences", "updated_at", "TEXT DEFAULT ''"),
+        ("user_preferences", "times_seen", "INTEGER DEFAULT 1"),
+    ]
+    for table, column, typedef in migrations:
+        if not await _column_exists(db, table, column):
+            await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {typedef}")
 
 
 # ── Interactive Sessions (Progress Save) ─────────────────────────
@@ -185,14 +230,24 @@ async def save_session(
         await db.commit()
 
 
-async def load_session(session_id: str) -> dict | None:
-    """Load a session by ID."""
+async def load_session(session_id: str, include_completed: bool = False) -> dict | None:
+    """Load a session by ID.
+
+    By default only returns rows with status ``active`` (unfinished flow).
+    Set ``include_completed=True`` to load any status (e.g. after finalize).
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute(
-            "SELECT * FROM interactive_sessions WHERE session_id = ?",
-            (session_id,),
-        )
+        if include_completed:
+            cursor = await db.execute(
+                "SELECT * FROM interactive_sessions WHERE session_id = ?",
+                (session_id,),
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT * FROM interactive_sessions WHERE session_id = ? AND status = 'active'",
+                (session_id,),
+            )
         row = await cursor.fetchone()
         if not row:
             return None
@@ -259,9 +314,10 @@ async def save_profile(profile: UserProfile) -> None:
                 current_salary_range, family_situation,
                 core_strengths, transferable_skills, personality_tags,
                 recurring_gaps, transition_stage, target_direction,
-                confidence_level, analysis_count, interview_count,
-                avg_readiness_score, created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                previous_target_direction, confidence_level, analysis_count,
+                interview_count, avg_readiness_score, last_analysis_id,
+                last_snapshot_at, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(user_id) DO UPDATE SET
                 name = excluded.name,
                 age = excluded.age,
@@ -279,10 +335,13 @@ async def save_profile(profile: UserProfile) -> None:
                 recurring_gaps = excluded.recurring_gaps,
                 transition_stage = excluded.transition_stage,
                 target_direction = excluded.target_direction,
+                previous_target_direction = excluded.previous_target_direction,
                 confidence_level = excluded.confidence_level,
                 analysis_count = excluded.analysis_count,
                 interview_count = excluded.interview_count,
                 avg_readiness_score = excluded.avg_readiness_score,
+                last_analysis_id = excluded.last_analysis_id,
+                last_snapshot_at = excluded.last_snapshot_at,
                 updated_at = excluded.updated_at
         """, (
             profile.user_id, profile.name, profile.age, profile.gender,
@@ -294,8 +353,10 @@ async def save_profile(profile: UserProfile) -> None:
             json.dumps(profile.personality_tags, ensure_ascii=False),
             json.dumps(profile.recurring_gaps, ensure_ascii=False),
             profile.transition_stage, profile.target_direction,
+            profile.previous_target_direction,
             profile.confidence_level, profile.analysis_count,
             profile.interview_count, profile.avg_readiness_score,
+            profile.last_analysis_id, profile.last_snapshot_at,
             profile.created_at, profile.updated_at,
         ))
         await db.commit()
@@ -329,10 +390,13 @@ async def load_profile(user_id: str) -> UserProfile | None:
                 recurring_gaps=json.loads(row["recurring_gaps"]),
                 transition_stage=row["transition_stage"],
                 target_direction=row["target_direction"],
+                previous_target_direction=row["previous_target_direction"] if "previous_target_direction" in row.keys() else "",
                 confidence_level=row["confidence_level"],
                 analysis_count=row["analysis_count"],
                 interview_count=row["interview_count"],
                 avg_readiness_score=row["avg_readiness_score"],
+                last_analysis_id=row["last_analysis_id"] if "last_analysis_id" in row.keys() else "",
+                last_snapshot_at=row["last_snapshot_at"] if "last_snapshot_at" in row.keys() else "",
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -384,21 +448,117 @@ async def list_events(
             ]
 
 
+async def list_events_by_types(
+    user_id: str,
+    event_types: list[str],
+    limit: int = 5,
+) -> list[MemoryEvent]:
+    """List recent events filtered by multiple event types."""
+    if not event_types:
+        return []
+    placeholders = ",".join("?" * len(event_types))
+    sql = (
+        f"SELECT * FROM memory_events WHERE user_id = ? "
+        f"AND event_type IN ({placeholders}) "
+        f"ORDER BY timestamp DESC LIMIT ?"
+    )
+    params: tuple = (user_id, *event_types, limit)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, params) as cursor:
+            rows = await cursor.fetchall()
+            return [
+                MemoryEvent(
+                    event_id=r["event_id"],
+                    user_id=r["user_id"],
+                    event_type=r["event_type"],
+                    timestamp=r["timestamp"],
+                    summary=r["summary"],
+                    details=r["details"],
+                    insights=json.loads(r["insights"]),
+                )
+                for r in rows
+            ]
+
+
+# ── Analysis snapshots ───────────────────────────────────────────
+
+async def save_snapshot(snapshot: AnalysisSnapshot) -> None:
+    """Persist a compressed analysis snapshot and link it on the user profile."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO analysis_snapshots (
+                snapshot_id, user_id, analysis_id, created_at,
+                target_direction, top_industries, top_roles,
+                strength_summary, gap_summary, plan_milestone,
+                user_constraints, narrative
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            snapshot.snapshot_id, snapshot.user_id, snapshot.analysis_id,
+            snapshot.created_at, snapshot.target_direction,
+            json.dumps(snapshot.top_industries, ensure_ascii=False),
+            json.dumps(snapshot.top_roles, ensure_ascii=False),
+            snapshot.strength_summary, snapshot.gap_summary,
+            snapshot.plan_milestone, snapshot.user_constraints,
+            snapshot.narrative,
+        ))
+        await db.commit()
+
+    profile = await load_profile(snapshot.user_id)
+    if profile:
+        profile.last_analysis_id = snapshot.analysis_id
+        profile.last_snapshot_at = snapshot.created_at
+        await save_profile(profile)
+
+
+async def get_latest_snapshot(user_id: str) -> AnalysisSnapshot | None:
+    """Return the most recent analysis snapshot for a user."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM analysis_snapshots WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+            (user_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return AnalysisSnapshot(
+                snapshot_id=row["snapshot_id"],
+                user_id=row["user_id"],
+                analysis_id=row["analysis_id"],
+                created_at=row["created_at"],
+                target_direction=row["target_direction"],
+                top_industries=json.loads(row["top_industries"]),
+                top_roles=json.loads(row["top_roles"]),
+                strength_summary=row["strength_summary"],
+                gap_summary=row["gap_summary"],
+                plan_milestone=row["plan_milestone"],
+                user_constraints=row["user_constraints"],
+                narrative=row["narrative"],
+            )
+
+
 # ── Layer 3: UserPreference CRUD ─────────────────────────────────
 
 async def save_preference(pref: UserPreference) -> None:
     """Upsert a preference."""
-    pref.created_at = pref.created_at or datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+    pref.created_at = pref.created_at or now
+    pref.updated_at = now
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
-            INSERT INTO user_preferences (user_id, key, value, source, confidence, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO user_preferences
+                (user_id, key, value, source, confidence, created_at, updated_at, times_seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(user_id, key, value) DO UPDATE SET
                 source = excluded.source,
-                confidence = excluded.confidence
+                confidence = MAX(excluded.confidence, user_preferences.confidence),
+                updated_at = excluded.updated_at,
+                times_seen = user_preferences.times_seen + 1
         """, (
             pref.user_id, pref.key, pref.value,
-            pref.source.value, pref.confidence, pref.created_at,
+            pref.source.value if isinstance(pref.source, PreferenceSource) else pref.source,
+            pref.confidence, pref.created_at, pref.updated_at, pref.times_seen,
         ))
         await db.commit()
 
@@ -419,7 +579,43 @@ async def load_preferences(user_id: str) -> list[UserPreference]:
                     value=r["value"],
                     source=r["source"],
                     confidence=r["confidence"],
+                    times_seen=r["times_seen"] if "times_seen" in r.keys() else 1,
                     created_at=r["created_at"],
+                    updated_at=r["updated_at"] if "updated_at" in r.keys() else "",
+                )
+                for r in rows
+            ]
+
+
+async def load_preferences_filtered(
+    user_id: str,
+    keys: list[str],
+    min_confidence: float = 0.6,
+) -> list[UserPreference]:
+    """Load preferences for specific keys; explicit always included, inferred filtered by confidence."""
+    if not keys:
+        return []
+    placeholders = ",".join("?" * len(keys))
+    sql = (
+        f"SELECT * FROM user_preferences WHERE user_id = ? AND key IN ({placeholders}) "
+        f"AND (source = 'explicit' OR confidence >= ?) "
+        f"ORDER BY confidence DESC, updated_at DESC"
+    )
+    params: tuple = (user_id, *keys, min_confidence)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, params) as cursor:
+            rows = await cursor.fetchall()
+            return [
+                UserPreference(
+                    user_id=r["user_id"],
+                    key=r["key"],
+                    value=r["value"],
+                    source=r["source"],
+                    confidence=r["confidence"],
+                    times_seen=r["times_seen"] if "times_seen" in r.keys() else 1,
+                    created_at=r["created_at"],
+                    updated_at=r["updated_at"] if "updated_at" in r.keys() else "",
                 )
                 for r in rows
             ]
@@ -434,6 +630,21 @@ async def delete_preference(user_id: str, key: str, value: str) -> bool:
         )
         await db.commit()
         return cursor.rowcount > 0
+
+
+async def delete_inferred_preferences_by_keys(user_id: str, keys: list[str]) -> int:
+    """Remove inferred preferences when user changes direction."""
+    if not keys:
+        return 0
+    placeholders = ",".join("?" * len(keys))
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            f"DELETE FROM user_preferences WHERE user_id = ? AND source = 'inferred' "
+            f"AND key IN ({placeholders})",
+            (user_id, *keys),
+        )
+        await db.commit()
+        return cursor.rowcount
 
 
 # ── Legacy functions (backward compat) ───────────────────────────
@@ -542,3 +753,15 @@ async def list_analyses(user_id: str, limit: int = 10) -> list[AnalysisRecord]:
                 )
                 for r in rows
             ]
+
+
+async def list_legacy_user_ids_without_profile() -> list[str]:
+    """User IDs with legacy user_memory row but no user_profiles row."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            SELECT um.user_id FROM user_memory um
+            LEFT JOIN user_profiles up ON um.user_id = up.user_id
+            WHERE up.user_id IS NULL
+        """)
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]

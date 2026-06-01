@@ -39,8 +39,11 @@ class UserProfile(BaseModel):
         description="exploring|decided|preparing|switching|settled",
     )
     target_direction: str = Field(default="", description="当前锁定的转行方向")
+    previous_target_direction: str = Field(default="", description="换方向前的目标")
     confidence_level: str = Field(default="low", description="low|medium|high")
     # 元数据
+    last_analysis_id: str = Field(default="", description="最近一次 analysis_records.record_id")
+    last_snapshot_at: str = Field(default="", description="最近一次快照时间 ISO8601")
     analysis_count: int = 0
     interview_count: int = 0
     avg_readiness_score: float = 0.0
@@ -86,7 +89,25 @@ class UserPreference(BaseModel):
     value: str = Field(description="偏好内容")
     source: PreferenceSource = PreferenceSource.EXPLICIT
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="置信度，inferred 的会低一些")
+    times_seen: int = Field(default=1, ge=1, description="同一偏好被重复推断/确认次数")
     created_at: str = ""
+    updated_at: str = ""
+
+
+class AnalysisSnapshot(BaseModel):
+    """单次分析压缩摘要 — 供回访用户跨次记忆，不全量 replay JSON。"""
+    snapshot_id: str
+    user_id: str
+    analysis_id: str
+    created_at: str
+    target_direction: str = ""
+    top_industries: list[str] = Field(default_factory=list)
+    top_roles: list[str] = Field(default_factory=list)
+    strength_summary: str = ""
+    gap_summary: str = ""
+    plan_milestone: str = ""
+    user_constraints: str = ""
+    narrative: str = Field(description="≤200 字，注入 memory_context")
 
 
 # ── Legacy (保留兼容) ────────────────────────────────────────────

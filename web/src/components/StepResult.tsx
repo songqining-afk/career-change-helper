@@ -12,7 +12,7 @@ export default function StepResult({ step, result }: StepResultProps) {
   if (!result) return null
 
   return (
-    <div className="rounded-2xl border border-border bg-surface-1 p-6 space-y-5">
+    <div className="card-surface p-6 space-y-5">
       {step === 1 && <ProfileResult data={result} />}
       {step === 2 && <MatchResult data={result} />}
       {step === 3 && <PlanResult data={result} />}
@@ -77,7 +77,9 @@ function ProfileResult({ data }: { data: Record<string, any> }) {
           <div className="space-y-2">
             {constraints.map((c, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
-                <span className="text-base">{(c.flexibility as string) === 'hard' ? '🔒' : '🔓'}</span>
+                <span className="text-[10px] font-medium text-text-muted shrink-0 w-14 text-right leading-tight">
+                  {(c.flexibility as string) === 'hard' ? '不可协商' : '可协商'}
+                </span>
                 <span className="text-warning font-medium">{String(c.dimension)}:</span>
                 <span className="text-text-secondary">{String(c.detail)}</span>
               </div>
@@ -126,7 +128,7 @@ function MatchResult({ data }: { data: Record<string, any> }) {
 
       {data.market_insight && (
         <div className="rounded-xl border border-accent/20 bg-accent/5 p-4">
-          <p className="text-xs text-accent leading-relaxed">💡 {String(data.market_insight)}</p>
+          <p className="text-xs text-accent leading-relaxed">{String(data.market_insight)}</p>
         </div>
       )}
 
@@ -134,7 +136,9 @@ function MatchResult({ data }: { data: Record<string, any> }) {
         <div>
           <h4 className="text-xs font-semibold text-danger mb-2">不推荐方向</h4>
           {antiRecs.map((r, i) => (
-            <p key={i} className="text-xs text-text-muted">✗ {r}</p>
+            <p key={i} className="text-xs text-text-muted pl-2 border-l-2 border-border-subtle">
+              {r}
+            </p>
           ))}
         </div>
       )}
@@ -172,11 +176,13 @@ function PlanResult({ data }: { data: Record<string, any> }) {
                 </span>
                 <span className="text-xs text-text-muted">({String(p.duration)})</span>
               </div>
-              <p className="text-xs text-text-secondary">🎯 {String(p.milestone)}</p>
+              <p className="text-xs text-text-secondary">{String(p.milestone)}</p>
               {(p.actions as string[])?.length > 0 && (
                 <div className="space-y-0.5 pt-1">
                   {(p.actions as string[]).slice(0, 3).map((a, j) => (
-                    <p key={j} className="text-xs text-text-muted">→ {a}</p>
+                    <p key={j} className="text-xs text-text-muted pl-2 border-l border-border-subtle">
+                      {a}
+                    </p>
                   ))}
                 </div>
               )}
@@ -189,7 +195,9 @@ function PlanResult({ data }: { data: Record<string, any> }) {
         <div className="rounded-xl border border-warning/20 bg-warning/5 p-4 space-y-2">
           <h4 className="text-xs font-semibold text-warning">风险提示</h4>
           {risks.map((r, i) => (
-            <p key={i} className="text-xs text-text-muted">⚠ {r}</p>
+            <p key={i} className="text-xs text-text-muted pl-2 border-l-2 border-warning/30">
+              {r}
+            </p>
           ))}
         </div>
       )}
@@ -254,7 +262,9 @@ function ResumeResult({ data }: { data: Record<string, any> }) {
         <div>
           <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">ATS 优化建议</h4>
           {atsTips.map((t, i) => (
-            <p key={i} className="text-xs text-text-muted">💡 {t}</p>
+            <p key={i} className="text-xs text-text-muted pl-2 border-l-2 border-border-subtle">
+              {t}
+            </p>
           ))}
         </div>
       )}
@@ -272,7 +282,7 @@ function SkillBadge({ name, level, variant = 'accent' }: { name: string; level: 
   return (
     <span className={`text-xs px-2.5 py-1 rounded-lg border ${colors} font-medium`}>
       {name}
-      <span className="ml-1.5 opacity-50">{'●'.repeat(level)}{'○'.repeat(5 - level)}</span>
+      <span className="ml-1.5 opacity-60 tabular-nums">{level}/5</span>
     </span>
   )
 }
